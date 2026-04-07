@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rechnung Generator Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+<!-- Tauri IPC setup -->
+<script>
+  // Expose invoke broadly if needed, but normally use window.__TAURI__.core.invoke
+</script>
+</head>
+<body>
+<div class="app">
+
+  <div class="app-header">
+    <div class="app-title">Rechnung <span>Generator</span></div>
+    <div class="header-actions">
+      <button class="btn btn-sm btn-icon" onclick="toggleTheme()" title="Dark Mode umschalten" id="theme-btn">🌙</button>
+      <label class="btn btn-sm btn-accent" style="cursor:pointer" title="Gespeichertes Backup laden">
+        📂 JSON Import
+        <input type="file" accept=".json" style="display:none" onchange="importBackupData(event)">
+      </label>
+      <button class="btn btn-sm btn-blue" onclick="exportBackupData()" title="Komplettes Backup speichern">💾 Backup Export</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('sender')">👤 Einstellungen</button>
+    <button class="tab" onclick="switchTab('recipients')">🏢 Empfänger</button>
+    <button class="tab" onclick="switchTab('services')">🗂 Leistungen</button>
+    <button class="tab" onclick="switchTab('create')">📝 Rechnungen erstellen</button>
+    <button class="tab" onclick="switchTab('preview')">👁 Vorschau</button>
+    <button class="tab" onclick="switchTab('archive')">📋 Archiv</button>
+    <button class="tab" onclick="switchTab('dashboard')">📊 Übersicht</button>
+  </div>
+
+  <div id="tab-sender" class="section active">
+    <div class="card">
+      <div class="card-title"><span class="icon">👤</span> Absender-Informationen</div>
+      <div class="grid2" style="gap:14px">
+        <div class="field"><label>Firmenname</label><input id="s-name" oninput="saveSender()"></div>
+        <div class="field"><label>E-Mail</label><input id="s-email" type="email" oninput="saveSender()"></div>
+        <div class="field"><label>Straße</label><input id="s-street" oninput="saveSender()"></div>
+        <div class="field"><label>Ort & PLZ</label><input id="s-city" oninput="saveSender()"></div>
+        <div class="field"><label>Telefon</label><input id="s-tel" oninput="saveSender()"></div>
+        <div class="field"><label>UID-Nummer</label><input id="s-uid" oninput="saveSender()"></div>
+        <div class="field"><label>Steuer-Nummer</label><input id="s-steuer" oninput="saveSender()"></div>
+        <div class="field"><label>Bank</label><input id="s-bank" oninput="saveSender()"></div>
+        <div class="field"><label>Kontoinhaber</label><input id="s-kinhaber" oninput="saveSender()"></div>
+        <div class="field"><label>IBAN</label><input id="s-iban" oninput="saveSender()"></div>
+        <div class="field"><label>BIC</label><input id="s-bic" oninput="saveSender()"></div>
+      </div>
+      <div style="margin-top:14px;"><span style="font-size:12.5px;color:var(--green)">✓ Änderungen werden automatisch gespeichert</span></div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title"><span class="icon">✉️</span> E-Mail Standard-Vorlage</div>
+      <div class="info-box" style="margin-bottom:1rem">
+        Nutze Platzhalter, die automatisch beim Senden ersetzt werden:<br>
+        <code>{Name}</code> = Empfängername | <code>{Nummer}</code> = Rechnungsnummer | <code>{Monat}</code> = Rechnungsmonat
+      </div>
+      <div class="field">
+        <label>Betreff</label>
+        <input id="em-subject" value="Rechnung {Nummer} - {Monat}" oninput="saveSender()">
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label>Nachricht (Body)</label>
+        <textarea id="em-body" rows="5" oninput="saveSender()">Hallo {Name},
+
+anbei erhältst du die Rechnung Nr. {Nummer} für den Monat {Monat}.
+
+Viele Grüße,
+Dein Team</textarea>
+      </div>
+    </div>
+
+    <!-- NEW DESKTOP SETTINGS -->
+    <div class="card">
+      <div class="card-title"><span class="icon">💻</span> App-Einstellungen</div>
+      <div class="field">
+        <label>Lokaler Speicherort (PDFs & Backup)</label>
+        <div style="display:flex;gap:8px">
+          <input id="sys-storage-path" disabled value="Laden..." style="flex:1">
+          <button class="btn btn-sm" onclick="pickStorageFolder()">Ändern</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-recipients" class="section">
+    <div class="card">
+      <div class="card-title"><span class="icon">🏢</span> Empfänger verwalten</div>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Name</th><th>Straße</th><th>Ort</th><th>Telefon</th><th>E-Mail</th><th></th></tr></thead>
+          <tbody id="rec-body"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:1rem">
+        <button class="btn btn-accent" onclick="addRecipient()">+ Empfänger hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-services" class="section">
+    <div class="card">
+      <div class="card-title"><span class="icon">🗂</span> Leistungsvorlagen verwalten</div>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>Bezeichnung</th><th>Art der Verrechnung</th><th>Preis (€)</th><th>Beschreibung (Optional)</th><th></th></tr></thead>
+          <tbody id="templates-container"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:1rem">
+        <button class="btn btn-accent" onclick="addServiceTemplate()">+ Vorlage hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-create" class="section">
+    <div class="card">
+      <div class="card-title"><span class="icon">⚙️</span> Rechnungseinstellungen</div>
+      <div class="grid4">
+        <div class="field"><label>Start-Rechnungsnummer</label><input type="number" id="inp-start-num" value="1" min="1" oninput="saveSettings();renderReceiptRows()"></div>
+        <div class="field"><label>Monat</label>
+          <select id="sel-month" onchange="saveSettings()">
+            <option value="Jänner">Jänner</option><option value="Februar">Februar</option><option value="März">März</option>
+            <option value="April">April</option><option value="Mai">Mai</option><option value="Juni">Juni</option>
+            <option value="Juli">Juli</option><option value="August">August</option><option value="September">September</option>
+            <option value="Oktober">Oktober</option><option value="November">November</option><option value="Dezember">Dezember</option>
+          </select>
+        </div>
+        <div class="field"><label>Jahr</label><input type="number" id="inp-year" onchange="saveSettings()"></div>
+        <div class="field"><label>Rechnungsdatum (Automatisch)</label><input type="date" id="inp-date" onchange="saveSettings()"></div>
+      </div>
+      <div class="divider"></div>
+      <!-- Removed closeMonth() button. Will be automated via date generation -->
+      <p style="font-size:12px;color:var(--ink3)">Die Monatstrennung und Nummernfortführung erfolgt automatisch durch den Master-Registry-Zähler.</p>
+    </div>
+
+    <div id="receipt-rows"></div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:.5rem">
+      <button class="btn btn-accent" onclick="addReceiptRow()">+ Rechnung hinzufügen</button>
+      <button class="btn btn-primary" onclick="switchTab('preview')">👁 Vorschau anzeigen</button>
+    </div>
+  </div>
+
+  <div id="tab-preview" class="section">
+    <div class="card" style="margin-bottom:1rem">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="preview-select" onchange="showPreview(this.value)" style="flex:1;min-width:220px"></select>
+        <button class="btn btn-primary" onclick="printCurrent()">🖨️ PDF Herunterladen</button>
+        <button class="btn btn-blue" onclick="emailCurrent()" id="btn-email-current" style="display:none;">📧 Als E-Mail senden</button>
+        <button class="btn btn-accent" onclick="printAll()">📑 Alle speichern & als "Finalized" markieren</button>
+      </div>
+    </div>
+    <div class="preview-wrap" id="preview-area"></div>
+  </div>
+
+  <!-- NEW ARCHIVE TAB -->
+  <div id="tab-archive" class="section">
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Rechnungsarchiv</div>
+      <div style="display:flex;gap:10px;margin-bottom:1rem">
+        <input type="text" id="archive-search" placeholder="Suche nach Name, Kategorie, Datum..." style="flex:1" onkeyup="filterArchive()">
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>Datum</th><th>Empfänger</th><th>Nummer / Datei</th><th>Betrag</th><th>Status</th><th>Aktionen</th></tr></thead>
+          <tbody id="archive-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW DASHBOARD TAB -->
+  <div id="tab-dashboard" class="section">
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> Monatsübersicht (Entwicklung)</div>
+      <div style="height: 300px; display:flex; align-items:flex-end; justify-content:space-around; gap:10px; border-bottom:1px solid var(--border); padding-bottom:10px;" id="dashboard-chart">
+        <!-- Bars computed in JS -->
+        <div class="empty-state">Noch keine Daten vorhanden.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
