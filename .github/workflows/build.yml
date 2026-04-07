@@ -31,7 +31,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Rechnung Generator ${{ github.ref_name }}'
           releaseBody: 'macOS and Windows builds attached.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
 
   build-windows:
@@ -58,5 +58,5 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Rechnung Generator ${{ github.ref_name }}'
           releaseBody: 'macOS and Windows builds attached.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
