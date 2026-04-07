@@ -10,6 +10,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_registry,
             commands::add_receipt,
+            commands::save_temp_pdf,
             commands::update_receipt_status,
             commands::delete_receipt,
             commands::open_email,

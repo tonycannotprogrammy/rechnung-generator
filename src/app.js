@@ -44,9 +44,15 @@ async function loadFromBackend() {
 }
 
 async function fullSave() {
+  const strip = (arr) => arr.map(item => {
+    const obj = {...item};
+    delete obj._deleting;
+    delete obj._deleteTimer;
+    return obj;
+  });
   sysSettings.sender = sender;
-  sysSettings.recipients = recipients;
-  sysSettings.templates = serviceTemplates;
+  sysSettings.recipients = strip(recipients);
+  sysSettings.templates = strip(serviceTemplates);
   sysSettings.drafts = receiptRows;
   sysSettings.history = recipientHistory;
   sysSettings.emailTemplate = emailTemplate;
@@ -56,7 +62,6 @@ async function fullSave() {
     console.error('Save failed:', e);
   }
 }
-
 window.addEventListener("DOMContentLoaded", async () => {
   await loadFromBackend();
 
@@ -145,7 +150,11 @@ function getSender(){ return {...sender}; }
 // ═══════════════════════════════════════════════════════
 function renderRecipients(){
   const tbody = document.getElementById('rec-body');
-  tbody.innerHTML = recipients.map((r,i)=>`
+  tbody.innerHTML = recipients.map((r,i)=>{
+    if(r._deleting) {
+      return `<tr><td colspan="7" style="background:var(--red-light); color:var(--red); text-align:center;">Wird in Kürze gelöscht... <button class="btn btn-sm btn-accent" style="margin-left:10px" onclick="undoRemoveRecipient(${i})">Rückgängig</button></td></tr>`;
+    }
+    return `
     <tr>
       <td style="color:var(--ink3);font-size:12px">${i+1}</td>
       <td><input value="${esc(r.name)}" placeholder="Name" oninput="recipients[${i}].name=this.value;fullSave();refreshDropdowns()"></td>
@@ -154,10 +163,27 @@ function renderRecipients(){
       <td><input value="${esc(r.phone||'')}" placeholder="Telefon" oninput="recipients[${i}].phone=this.value;fullSave()"></td>
       <td><input type="email" value="${esc(r.email||'')}" placeholder="E-Mail" oninput="recipients[${i}].email=this.value;fullSave()"></td>
       <td><button class="btn btn-danger btn-sm btn-icon" onclick="removeRecipient(${i})">×</button></td>
-    </tr>`).join('');
+    </tr>`
+  }).join('');
 }
 function addRecipient(){ recipients.push({name:'',street:'',city:'',phone:'',email:''}); renderRecipients(); fullSave(); refreshDropdowns(); }
-function removeRecipient(i){ recipients.splice(i,1); renderRecipients(); fullSave(); refreshDropdowns(); }
+function removeRecipient(i){
+  const r = recipients[i];
+  r._deleting = true;
+  renderRecipients();
+  r._deleteTimer = setTimeout(() => {
+    recipients = recipients.filter(x => x !== r);
+    renderRecipients();
+    fullSave();
+    refreshDropdowns();
+  }, 5000);
+}
+function undoRemoveRecipient(i){
+  const r = recipients[i];
+  clearTimeout(r._deleteTimer);
+  r._deleting = false;
+  renderRecipients();
+}
 function recipientOptions(selected=''){ return `<option value="">— Benutzerdefiniert —</option>`+ recipients.map(r=>`<option value="${esc(r.name)}" ${r.name===selected?'selected':''}>${esc(r.name)}</option>`).join(''); }
 function refreshDropdowns(){ document.querySelectorAll('.rec-select').forEach(sel=>{ const cur=sel.value; sel.innerHTML=recipientOptions(cur); }); }
 
@@ -167,7 +193,11 @@ function refreshDropdowns(){ document.querySelectorAll('.rec-select').forEach(se
 function renderTemplates(){
   const c = document.getElementById('templates-container');
   if(!serviceTemplates.length){ c.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--ink3);padding:1rem;">Noch keine Vorlagen vorhanden.</td></tr>'; return; }
-  c.innerHTML = serviceTemplates.map((t,i)=>`
+  c.innerHTML = serviceTemplates.map((t,i)=>{
+    if(t._deleting) {
+      return `<tr><td colspan="5" style="background:var(--red-light); color:var(--red); text-align:center;">Wird in Kürze gelöscht... <button class="btn btn-sm btn-accent" style="margin-left:10px" onclick="undoRemoveTemplate(${t.id})">Rückgängig</button></td></tr>`;
+    }
+    return `
     <tr>
       <td><input value="${esc(t.name)}" placeholder="z.B. Reinigung" oninput="serviceTemplates[${i}].name=this.value;fullSave();renderReceiptRows()"></td>
       <td>
@@ -180,10 +210,29 @@ function renderTemplates(){
       <td><input type="number" step="0.01" value="${t.rate}" oninput="serviceTemplates[${i}].rate=parseFloat(this.value)||0;fullSave();renderReceiptRows()"></td>
       <td><input value="${esc(t.desc||'')}" placeholder="Optional" oninput="serviceTemplates[${i}].desc=this.value;fullSave();renderReceiptRows()"></td>
       <td><button class="btn btn-danger btn-sm btn-icon" onclick="removeTemplate(${t.id})">×</button></td>
-    </tr>`).join('');
+    </tr>`
+  }).join('');
 }
 function addServiceTemplate(){ serviceTemplates.push({ id: Date.now(), name: '', type: 'fixed', rate: 0, desc: '' }); fullSave(); renderTemplates(); }
-function removeTemplate(id){ serviceTemplates = serviceTemplates.filter(t=>t.id!==id); fullSave(); renderTemplates(); renderReceiptRows(); }
+function removeTemplate(id){
+  const t = serviceTemplates.find(x => x.id === id);
+  if (!t) return;
+  t._deleting = true;
+  renderTemplates();
+  t._deleteTimer = setTimeout(() => {
+    serviceTemplates = serviceTemplates.filter(x => x.id !== id);
+    fullSave();
+    renderTemplates();
+    renderReceiptRows();
+  }, 5000);
+}
+function undoRemoveTemplate(id){
+  const t = serviceTemplates.find(x => x.id === id);
+  if (!t) return;
+  clearTimeout(t._deleteTimer);
+  t._deleting = false;
+  renderTemplates();
+}
 
 // ═══════════════════════════════════════════════════════
 //  INVOICE CREATION
@@ -440,16 +489,9 @@ function showPreview(val){
 }
 
 // TAURI PDF SAVE FLOW
-async function generateAndSavePDF(row, num, status="Finalized") {
+async function generatePDFBytes(row, num, filename) {
   const month = document.getElementById('sel-month').value;
   const year = document.getElementById('inp-year').value;
-  const recName = (row.recipient || row.customName || 'Unbekannt').replace(/[^a-zA-Z0-9_\-]/g, '');
-  const monthNum = String(new Date(Date.parse(month +" 1, 2012")).getMonth()+1).padStart(2, '0');
-  let vendorPrefix = recName.substring(0,4).toUpperCase();
-  if(!vendorPrefix) vendorPrefix = "UNKN";
-  
-  const filename = `${year}${monthNum}-${vendorPrefix}-${String(num).padStart(4,'0')}.pdf`;
-  
   const taxRate = row.taxRate != null ? row.taxRate : 0.20;
   const netto = row.betrag || 0;
   const total = netto + netto * taxRate;
@@ -487,26 +529,110 @@ async function generateAndSavePDF(row, num, status="Finalized") {
   const pdfBytes = await html2pdf().set(opt).from(wrapper.firstElementChild).outputPdf('arraybuffer');
   document.body.removeChild(wrapper);
 
-  // Convert arraybuffer to array for Tauri byte passing
-  const bytesArray = Array.from(new Uint8Array(pdfBytes));
+  return Array.from(new Uint8Array(pdfBytes));
+}
+
+async function finalizeReceipt(row, num, status="Finalized") {
+  const month = document.getElementById('sel-month').value;
+  const year = document.getElementById('inp-year').value;
+  const recName = (row.recipient || row.customName || 'Unbekannt').replace(/[^a-zA-Z0-9_\-]/g, '');
+  const monthNum = String(new Date(Date.parse(month +" 1, 2012")).getMonth()+1).padStart(2, '0');
+  let vendorPrefix = recName.substring(0,4).toUpperCase();
+  if(!vendorPrefix) vendorPrefix = "UNKN";
   
+  const filename = `${year}${monthNum}-${vendorPrefix}-${String(num).padStart(4,'0')}.pdf`;
+  const taxRate = row.taxRate != null ? row.taxRate : 0.20;
+  const netto = row.betrag || 0;
+  const total = netto + netto * taxRate;
   let primaryCategory = "Allgemein";
   if(row.calcLines && row.calcLines.length > 0) primaryCategory = row.calcLines[0].desc.split(' ')[0] || "Allgemein";
   
   const metadata = {
     file_name: filename,
-    path: "", // backend will fill
+    path: "", 
     date: document.getElementById('inp-date').value,
     vendor: recName,
     category: primaryCategory,
     amount: total,
-    status: status
+    status: status,
+    row_data: row,
+    invoice_num: num
   };
 
-  const savedReceipt = await invoke('add_receipt', { metadata, pdfBytes: bytesArray });
-  await loadFromBackend(); // refresh registry
+  const savedReceipt = await invoke('add_receipt', { metadata, pdfBytes: [] });
+  await loadFromBackend(); 
   return savedReceipt;
 }
+
+async function downloadArchivePdf(fileName) {
+  const r = appRegistry.find(x => x.file_name === fileName);
+  if(!r) return;
+  if(r.row_data && r.invoice_num) {
+    const tempWrapper = document.createElement('div');
+    tempWrapper.innerHTML = buildInvoiceHTML(r.row_data, r.invoice_num);
+    const S = getSender();
+    if(S.iban && S.bic && S.kontoinhaber) {
+        const tr = r.row_data.taxRate != null ? r.row_data.taxRate : 0.20;
+        const total = (r.row_data.betrag||0) * (1 + tr);
+        const parts = r.date.split('-');
+        epcDataStore[r.invoice_num] = buildEPCString(S, total, r.invoice_num, document.getElementById('sel-month').value, parts[0]||'2024');
+    }
+    
+    document.body.appendChild(tempWrapper);
+    const id = r.invoice_num;
+    tempWrapper.querySelectorAll('[data-epc-id]').forEach(el => {
+      const epcStr = epcDataStore[id];
+      if(!epcStr) return;
+      try {
+        new QRCode(el, { text: epcStr, width: 200, height: 200, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      } catch(e) {}
+    });
+
+    const opt = { margin: [10, 10, 10, 10], filename: fileName, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
+    await html2pdf().set(opt).from(tempWrapper).save();
+    document.body.removeChild(tempWrapper);
+  } else {
+    alert("Das ist ein altes Dokument. Bitte benutze den Vorschau/Email-Teilen Button.");
+  }
+}
+
+async function previewArchiveReceipt(fileName) {
+  const r = appRegistry.find(x => x.file_name === fileName);
+  if(!r) return;
+  if(r.row_data && r.invoice_num) {
+    switchTab('preview');
+    const area = document.getElementById('preview-area');
+    document.getElementById('btn-email-current').style.display = 'none';
+    area.innerHTML = buildInvoiceHTML(r.row_data, r.invoice_num);
+    setTimeout(renderEPCQRCodes, 50);
+  } else {
+    alert("Das ist ein altes Dokument. Keine Vorschau vorhanden.");
+  }
+}
+
+async function emailArchiveReceipt(fileName) {
+  const r = appRegistry.find(x => x.file_name === fileName);
+  if(!r) return;
+  
+  if(!r.row_data || !r.invoice_num) {
+      alert("Altes Dokument: Standard-Email wird vorbereitet.");
+      await invoke('open_email', { to:'', subject:'Rechnung', body:'', attachmentPath: r.path });
+      return;
+  }
+
+  const recInfo = getRecipientInfo(r.row_data);
+  const parts = r.date.split('-');
+  const month = document.getElementById('sel-month').value; 
+  
+  let subj = emailTemplate.subject.replace(/{Name}/g, recInfo.name).replace(/{Nummer}/g, r.invoice_num).replace(/{Monat}/g, month);
+  let body = emailTemplate.body.replace(/{Name}/g, recInfo.name).replace(/{Nummer}/g, r.invoice_num).replace(/{Monat}/g, month);
+
+  const bytesArray = await generatePDFBytes(r.row_data, r.invoice_num, fileName);
+  const tempPath = await invoke('save_temp_pdf', { fileName: fileName, pdfBytes: bytesArray });
+
+  await invoke('open_email', { to: recInfo.email||'', subject: subj, body: body, attachmentPath: tempPath });
+}
+
 
 async function printCurrent(){
   const val = document.getElementById('preview-select').value;
@@ -516,8 +642,11 @@ async function printCurrent(){
   const startNum = parseInt(document.getElementById('inp-start-num').value)||1;
   const row = receiptRows[idx];
   if(row) {
-    const receipt = await generateAndSavePDF(row, startNum+idx, "Finalized");
-    await invoke('print_file', { path: receipt.path });
+    const filename = `Rechnung_${startNum+idx}.pdf`;
+    const bytesArray = await generatePDFBytes(row, startNum+idx, filename);
+    const tempPath = await invoke('save_temp_pdf', { fileName: filename, pdfBytes: bytesArray });
+    await finalizeReceipt(row, startNum+idx, "Finalized");
+    await invoke('print_file', { path: tempPath });
   }
 }
 
@@ -526,16 +655,14 @@ async function printAll(){
   const startNum = parseInt(document.getElementById('inp-start-num').value)||1;
   
   for(let i=0; i<receiptRows.length; i++) {
-    await generateAndSavePDF(receiptRows[i], startNum+i, "Finalized");
-    await new Promise(r => setTimeout(r, 600)); 
+    await finalizeReceipt(receiptRows[i], startNum+i, "Finalized");
+    await new Promise(r => setTimeout(r, 100));
   }
   
-  // Clear drafts properly
   const count = receiptRows.length;
   receiptRows = [];
   document.getElementById('inp-start-num').value = startNum + count;
 
-  // Auto-advance month if > 15 logic
   const selMonth = document.getElementById('sel-month');
   if(selMonth.selectedIndex < 11) selMonth.selectedIndex++;
   else { selMonth.selectedIndex = 0; document.getElementById('inp-year').value++; }
@@ -564,8 +691,12 @@ async function emailCurrent() {
   let subj = emailTemplate.subject.replace(/{Name}/g, r.name).replace(/{Nummer}/g, num).replace(/{Monat}/g, month);
   let body = emailTemplate.body.replace(/{Name}/g, r.name).replace(/{Nummer}/g, num).replace(/{Monat}/g, month);
 
-  const receipt = await generateAndSavePDF(row, num, "Sent");
-  await invoke('open_email', { to: r.email, subject: subj, body: body, attachmentPath: receipt.path });
+  const filename = `Rechnung_${num}.pdf`;
+  const bytesArray = await generatePDFBytes(row, num, filename);
+  const tempPath = await invoke('save_temp_pdf', { fileName: filename, pdfBytes: bytesArray });
+  await finalizeReceipt(row, num, "Sent");
+
+  await invoke('open_email', { to: r.email, subject: subj, body: body, attachmentPath: tempPath });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -583,7 +714,11 @@ function renderArchive() {
     r.file_name.toLowerCase().includes(term)
   );
 
-  tbody.innerHTML = filtered.map(r => `
+  tbody.innerHTML = filtered.map(r => {
+    if(r._deleting) {
+      return `<tr><td colspan="6" style="background:var(--red-light); color:var(--red); text-align:center;">Wird in Kürze gelöscht... <button class="btn btn-sm btn-accent" style="margin-left:10px" onclick="undoDeleteReceipt('${esc(r.file_name)}')">Rückgängig</button></td></tr>`;
+    }
+    return `
     <tr>
       <td>${r.date}</td>
       <td><strong>${esc(r.vendor)}</strong></td>
@@ -598,13 +733,14 @@ function renderArchive() {
         </select>
       </td>
       <td>
-        <button class="btn btn-sm btn-icon" onclick="invoke('open_email', {to:'', subject:'Rechnung', body:'', attachmentPath:'${esc(r.path)}'})" title="Teilen">📧</button>
+        <button class="btn btn-sm btn-icon" onclick="previewArchiveReceipt('${esc(r.file_name)}')" title="Vorschau ansehen">👁</button>
+        <button class="btn btn-sm btn-icon" onclick="downloadArchivePdf('${esc(r.file_name)}')" title="PDF Herunterladen">💾</button>
+        <button class="btn btn-sm btn-icon" onclick="emailArchiveReceipt('${esc(r.file_name)}')" title="Teilen/Email">📧</button>
         <button class="btn btn-sm btn-icon btn-danger" onclick="deleteReceipt('${esc(r.file_name)}')">×</button>
       </td>
     </tr>
-  `).join('');
-  
-  renderDashboard();
+  `
+  }).join('');
 }
 
 function filterArchive() { renderArchive(); }
@@ -616,44 +752,27 @@ async function updateStatus(fileName, newStatus) {
 }
 
 async function deleteReceipt(fileName) {
-  if(!confirm(`Bist du sicher, dass du "${fileName}" löschen möchtest? Dies löscht auch die Datei unwiderruflich.`)) return;
-  await invoke('delete_receipt', { fileName });
-  await loadFromBackend();
+  const r = appRegistry.find(x => x.file_name === fileName);
+  if(!r) return;
+  r._deleting = true;
+  renderArchive();
+  r._deleteTimer = setTimeout(async () => {
+    await invoke('delete_receipt', { fileName });
+    await loadFromBackend();
+    renderArchive();
+  }, 5000);
+}
+
+function undoDeleteReceipt(fileName) {
+  const r = appRegistry.find(x => x.file_name === fileName);
+  if(!r) return;
+  clearTimeout(r._deleteTimer);
+  r._deleting = false;
   renderArchive();
 }
 
-function renderDashboard() {
-  const chart = document.getElementById('dashboard-chart');
-  if(!chart) return;
-  
-  if(appRegistry.length === 0) {
-    chart.innerHTML = '<div class="empty-state">Noch keine Daten vorhanden.</div>';
-    return;
-  }
-  
-  // Group by vendor 
-  const byVendor = {};
-  appRegistry.forEach(r => { 
-    if(!byVendor[r.vendor]) byVendor[r.vendor] = 0;
-    byVendor[r.vendor] += r.amount;
-  });
-  
-  const max = Math.max(...Object.values(byVendor));
-  
-  chart.innerHTML = Object.keys(byVendor).map(v => {
-    const h = (byVendor[v] / max) * 250;
-    return `
-      <div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:40px;">
-        <span style="font-size:11px;color:var(--ink2);margin-bottom:4px;">${byVendor[v].toFixed(0)}€</span>
-        <div style="width:30px;height:${h}px;background:var(--accent);border-radius:4px 4px 0 0;transition:height .3s;"></div>
-        <span style="font-size:11px;color:var(--ink);margin-top:6px;writing-mode:horizontal-tb;transform:rotate(0deg);text-align:center;overflow:hidden;text-overflow:ellipsis;width:100%;">${esc(v)}</span>
-      </div>
-    `;
-  }).join('');
-}
-
 function switchTab(name){
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', ['sender','recipients','services','create','preview','archive','dashboard'][i]===name));
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', ['sender','recipients','services','create','preview','archive'][i]===name));
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if(name==='preview') populatePreviewSelect();

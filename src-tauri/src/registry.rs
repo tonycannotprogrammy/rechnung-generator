@@ -11,6 +11,10 @@ pub struct Receipt {
     pub category: String,
     pub amount: f64,
     pub status: String,
+    #[serde(default)]
+    pub row_data: serde_json::Value,
+    #[serde(default)]
+    pub invoice_num: u32,
 }
 
 pub fn get_storage_dir() -> PathBuf {

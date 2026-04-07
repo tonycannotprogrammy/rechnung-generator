@@ -17,13 +17,16 @@
 
   <div class="app-header">
     <div class="app-title">Rechnung <span>Generator</span></div>
-    <div class="header-actions">
-      <button class="btn btn-sm btn-icon" onclick="toggleTheme()" title="Dark Mode umschalten" id="theme-btn">🌙</button>
-      <label class="btn btn-sm btn-accent" style="cursor:pointer" title="Gespeichertes Backup laden">
-        📂 JSON Import
-        <input type="file" accept=".json" style="display:none" onchange="importBackupData(event)">
-      </label>
-      <button class="btn btn-sm btn-blue" onclick="exportBackupData()" title="Komplettes Backup speichern">💾 Backup Export</button>
+    <div class="header-actions" style="position:relative;">
+      <button class="btn btn-sm" onclick="document.getElementById('settings-dropdown').style.display = document.getElementById('settings-dropdown').style.display === 'none' ? 'flex' : 'none'" title="Einstellungen">⚙️ Einstellungen</button>
+      <div id="settings-dropdown" style="display:none; position:absolute; right:0; top:110%; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-md); border-radius:var(--radius-sm); padding:10px; z-index:100; min-width:180px; flex-direction:column; gap:8px;">
+        <button class="btn btn-sm" onclick="toggleTheme(); this.parentNode.style.display='none'" style="width:100%; justify-content:flex-start;" id="theme-btn">🌙 Dark Mode</button>
+        <label class="btn btn-sm btn-accent" style="cursor:pointer; width:100%; justify-content:flex-start; margin:0;">
+          📂 JSON Import
+          <input type="file" accept=".json" style="display:none" onchange="importBackupData(event); this.parentNode.parentNode.style.display='none'">
+        </label>
+        <button class="btn btn-sm btn-blue" onclick="exportBackupData(); this.parentNode.style.display='none'" style="width:100%; justify-content:flex-start;">💾 Backup Export</button>
+      </div>
     </div>
   </div>
 
@@ -31,10 +34,9 @@
     <button class="tab active" onclick="switchTab('sender')">👤 Einstellungen</button>
     <button class="tab" onclick="switchTab('recipients')">🏢 Empfänger</button>
     <button class="tab" onclick="switchTab('services')">🗂 Leistungen</button>
-    <button class="tab" onclick="switchTab('create')">📝 Rechnungen erstellen</button>
+    <button class="tab" onclick="switchTab('create')">📝 Rechnung</button>
     <button class="tab" onclick="switchTab('preview')">👁 Vorschau</button>
     <button class="tab" onclick="switchTab('archive')">📋 Archiv</button>
-    <button class="tab" onclick="switchTab('dashboard')">📊 Übersicht</button>
   </div>
 
   <div id="tab-sender" class="section active">
@@ -177,16 +179,7 @@ Dein Team</textarea>
     </div>
   </div>
 
-  <!-- NEW DASHBOARD TAB -->
-  <div id="tab-dashboard" class="section">
-    <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Monatsübersicht (Entwicklung)</div>
-      <div style="height: 300px; display:flex; align-items:flex-end; justify-content:space-around; gap:10px; border-bottom:1px solid var(--border); padding-bottom:10px;" id="dashboard-chart">
-        <!-- Bars computed in JS -->
-        <div class="empty-state">Noch keine Daten vorhanden.</div>
-      </div>
-    </div>
-  </div>
+
 
 </div>
 

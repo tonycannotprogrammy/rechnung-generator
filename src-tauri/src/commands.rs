@@ -16,6 +16,7 @@ pub fn add_receipt(metadata: Receipt, pdf_bytes: Vec<u8>) -> Result<Receipt, Str
     let mut reg = registry::load_registry();
     let root = registry::get_storage_dir();
     
+    // We only create the path in memory for the metadata if it doesn't have one, but we don't save the physical PDF!
     let parts: Vec<&str> = metadata.date.split('-').collect();
     let year = if !parts.is_empty() { parts[0] } else { "Unknown" };
     let month = if parts.len() > 1 { parts[1] } else { "XX" };
@@ -24,7 +25,8 @@ pub fn add_receipt(metadata: Receipt, pdf_bytes: Vec<u8>) -> Result<Receipt, Str
     fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
     
     let path = target_dir.join(&metadata.file_name);
-    fs::write(&path, pdf_bytes).map_err(|e| e.to_string())?;
+    // REMOVED fs::write because we no longer store PDFs by default
+
     
     let mut updated_metadata = metadata.clone();
     updated_metadata.path = path.to_string_lossy().to_string();
@@ -32,6 +34,14 @@ pub fn add_receipt(metadata: Receipt, pdf_bytes: Vec<u8>) -> Result<Receipt, Str
     reg.push(updated_metadata.clone());
     registry::save_registry(&reg)?;
     Ok(updated_metadata)
+}
+
+#[command]
+pub fn save_temp_pdf(file_name: String, pdf_bytes: Vec<u8>) -> Result<String, String> {
+    let temp_dir = std::env::temp_dir();
+    let path = temp_dir.join(file_name);
+    fs::write(&path, pdf_bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 #[command]
