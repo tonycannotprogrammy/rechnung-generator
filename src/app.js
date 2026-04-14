@@ -1125,16 +1125,34 @@ async function emailCurrent() {
 //  ARCHIVE TABLE (with overflow menu & clickable rows)
 // ═══════════════════════════════════════════════════════
 function renderArchive() {
-  const term = (document.getElementById('archive-search')?.value || '').toLowerCase();
+  const term = (document.getElementById('archive-search')?.value || '').toLowerCase().trim();
   const tbody = document.getElementById('archive-body');
   if(!tbody) return;
-  
-  const filtered = appRegistry.filter(r => 
-    r.vendor.toLowerCase().includes(term) ||
-    r.category.toLowerCase().includes(term) ||
-    r.date.includes(term) ||
-    r.file_name.toLowerCase().includes(term)
-  );
+
+  const searchTerms = term.split(' ').filter(t => t);
+
+  const filtered = appRegistry.filter(r => {
+    if (!term) return true;
+    
+    let payload = [r.vendor, r.category, r.date, r.file_name, r.status, r.amount];
+    
+    // Search within Dienstleistungen (services)
+    if (r.row_data && r.row_data.calcLines) {
+      r.row_data.calcLines.forEach(l => {
+        if (l.desc) payload.push(l.desc);
+      });
+    }
+    const fullText = payload.join(' ').toLowerCase();
+
+    // 1. Token-based match (e.g. "thomas 2024")
+    const wordsMatch = searchTerms.every(t => fullText.includes(t));
+    if (wordsMatch) return true;
+
+    // 2. Sequential fuzzy fallback (e.g. "tms" matches "thomas")
+    const fuzzyPattern = term.split('').map(c => c.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('.*');
+    const fuzzyRegex = new RegExp(fuzzyPattern, 'i');
+    return fuzzyRegex.test(fullText);
+  });
 
   tbody.innerHTML = filtered.map(r => {
     if(r._deleting) {
