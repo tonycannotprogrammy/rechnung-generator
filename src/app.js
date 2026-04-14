@@ -225,9 +225,8 @@ async function renderProfileList() {
     const list = document.getElementById('profile-list');
     list.innerHTML = profiles.map(p => `
       <div class="profile-item ${p===activeProfile?'active':''}">
-        <span class="profile-name">${esc(p)}</span>
+        <span class="profile-name editable" style="cursor:pointer;" onclick="renameExistingProfile('${esc(p)}')">${esc(p)}</span>
         ${p===activeProfile ? '<span class="badge badge-accent">Aktiv</span>' : `<button class="btn btn-sm" onclick="handleProfileSwitch('${esc(p)}');renderProfileList()">Wechseln</button>`}
-        <button class="btn btn-sm btn-icon" onclick="renameExistingProfile('${esc(p)}')">✏️</button>
         ${p!==activeProfile ? `<button class="btn btn-sm btn-danger btn-icon" onclick="deleteExistingProfile('${esc(p)}')">×</button>` : ''}
       </div>
     `).join('');
