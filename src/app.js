@@ -227,7 +227,8 @@ async function renderProfileList() {
       <div class="profile-item ${p===activeProfile?'active':''}">
         <span class="profile-name">${esc(p)}</span>
         ${p===activeProfile ? '<span class="badge badge-accent">Aktiv</span>' : `<button class="btn btn-sm" onclick="handleProfileSwitch('${esc(p)}');renderProfileList()">Wechseln</button>`}
-        ${p!==activeProfile ? `<button class="btn btn-sm btn-danger" onclick="deleteExistingProfile('${esc(p)}')">×</button>` : ''}
+        <button class="btn btn-sm btn-icon" onclick="renameExistingProfile('${esc(p)}')">✏️</button>
+        ${p!==activeProfile ? `<button class="btn btn-sm btn-danger btn-icon" onclick="deleteExistingProfile('${esc(p)}')">×</button>` : ''}
       </div>
     `).join('');
   } catch(e) {}
@@ -243,6 +244,24 @@ async function createNewProfile() {
     renderProfileList();
   } catch(e) {
     alert('Fehler: ' + e);
+  }
+}
+
+async function renameExistingProfile(oldName) {
+  const newName = prompt(`Neuer Name für Profil "${oldName}":`, oldName);
+  if(!newName || newName.trim() === '' || newName === oldName) return;
+  try {
+    await invoke('rename_profile', { oldName: oldName, newName: newName.trim() });
+    
+    // If we renamed the active profile, update the local variable
+    if (activeProfile === oldName) {
+      activeProfile = newName.trim();
+    }
+    
+    await loadProfiles();
+    renderProfileList();
+  } catch(e) {
+    alert('Fehler beim Umbenennen: ' + e);
   }
 }
 

@@ -249,6 +249,32 @@ pub fn delete_profile(profile_name: String) -> Result<(), String> {
     Ok(())
 }
 
+#[command]
+pub fn rename_profile(old_name: String, new_name: String) -> Result<(), String> {
+    let mut cfg = config::load_local_config();
+    let base = PathBuf::from(&cfg.storage_path);
+    
+    let old_dir = base.join(&old_name);
+    let new_dir = base.join(&new_name);
+
+    if !old_dir.exists() {
+        return Err(format!("Profile '{}' does not exist", old_name));
+    }
+    if new_dir.exists() {
+        return Err(format!("Profile '{}' already exists", new_name));
+    }
+
+    fs::rename(&old_dir, &new_dir).map_err(|e| e.to_string())?;
+
+    // If we renamed the currently active profile, update the config
+    if cfg.active_profile == old_name {
+        cfg.active_profile = new_name;
+        config::save_local_config(&cfg)?;
+    }
+
+    Ok(())
+}
+
 // ═══════════════════════════════════════════════════════
 //  MIGRATION (called once on startup)
 // ═══════════════════════════════════════════════════════

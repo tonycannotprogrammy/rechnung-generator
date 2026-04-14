@@ -31,6 +31,7 @@ pub fn run() {
             commands::get_active_profile,
             commands::switch_profile,
             commands::create_profile,
+            commands::rename_profile,
             commands::delete_profile,
             commands::run_migration
         ])
