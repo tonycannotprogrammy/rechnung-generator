@@ -225,7 +225,13 @@ async function renderProfileList() {
     const list = document.getElementById('profile-list');
     list.innerHTML = profiles.map(p => `
       <div class="profile-item ${p===activeProfile?'active':''}">
-        <span class="profile-name editable" style="cursor:pointer;" onclick="renameExistingProfile('${esc(p)}')">${esc(p)}</span>
+        <div class="profile-name editable" 
+             contenteditable="true" 
+             spellcheck="false"
+             style="border-bottom: 1px dashed #ccc; display: inline-block; min-width: 80px; padding: 2px 4px; outline: none; cursor: text;"
+             onfocus="this.dataset.before = this.innerText"
+             onblur="renameInlineProfile(this, '${esc(p)}')"
+             onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">${esc(p)}</div>
         ${p===activeProfile ? '<span class="badge badge-accent">Aktiv</span>' : `<button class="btn btn-sm" onclick="handleProfileSwitch('${esc(p)}');renderProfileList()">Wechseln</button>`}
         ${p!==activeProfile ? `<button class="btn btn-sm btn-danger btn-icon" onclick="deleteExistingProfile('${esc(p)}')">×</button>` : ''}
       </div>
@@ -246,21 +252,28 @@ async function createNewProfile() {
   }
 }
 
-async function renameExistingProfile(oldName) {
-  const newName = prompt(`Neuer Name für Profil "${oldName}":`, oldName);
-  if(!newName || newName.trim() === '' || newName === oldName) return;
+async function renameInlineProfile(element, oldName) {
+  const newName = element.innerText.trim();
+  if(!newName || newName === '' || newName === oldName) {
+    element.innerText = oldName; // revert visual changes
+    return;
+  }
+  
   try {
-    await invoke('rename_profile', { oldName: oldName, newName: newName.trim() });
+    element.contentEditable = "false";
+    await invoke('rename_profile', { oldName: oldName, newName: newName });
     
     // If we renamed the active profile, update the local variable
     if (activeProfile === oldName) {
-      activeProfile = newName.trim();
+      activeProfile = newName;
     }
     
     await loadProfiles();
     renderProfileList();
   } catch(e) {
     alert('Fehler beim Umbenennen: ' + e);
+    element.innerText = oldName; // revert on fail
+    element.contentEditable = "true";
   }
 }
 
