@@ -266,6 +266,18 @@ pub fn rename_profile(old_name: String, new_name: String) -> Result<(), String> 
 
     fs::rename(&old_dir, &new_dir).map_err(|e| e.to_string())?;
 
+    // Update all absolute path strings in registry.json inside the new directory
+    let registry_path = new_dir.join("registry.json");
+    if registry_path.exists() {
+        if let Ok(content) = fs::read_to_string(&registry_path) {
+            // Replace the old directory prefix with the new directory prefix
+            let old_str = old_dir.to_string_lossy().to_string();
+            let new_str = new_dir.to_string_lossy().to_string();
+            let updated_content = content.replace(&old_str, &new_str);
+            let _ = fs::write(&registry_path, updated_content);
+        }
+    }
+
     // If we renamed the currently active profile, update the config
     if cfg.active_profile == old_name {
         cfg.active_profile = new_name;
