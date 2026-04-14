@@ -25,6 +25,8 @@ async function loadFromBackend() {
 
   try {
     sysSettings = await invoke('get_settings');
+    if(typeof sysSettings === 'string') sysSettings = JSON.parse(sysSettings);
+    if(window.applyLanguageToDOM) window.applyLanguageToDOM();
   } catch(e) {
     console.warn('No settings yet, starting fresh:', e);
     sysSettings = {};
@@ -206,6 +208,8 @@ async function handleProfileSwitch(name) {
     else document.getElementById('inp-year').value = new Date().getFullYear();
     if(sysSettings.date) document.getElementById('inp-date').value = sysSettings.date;
     else document.getElementById('inp-date').value = getSmartDate();
+    
+    if(window.applyLanguageToDOM) window.applyLanguageToDOM();
   } catch(e) {
     alert('Fehler beim Profilwechsel: ' + e);
   }
@@ -771,11 +775,11 @@ function buildInvoiceHTML(row, num, overrideMonth, overrideYear, overrideDate){
 <div class="invoice-paper" id="invoice-${num}">
   <div class="inv-header">
     <div>
-      <h2 style="margin-bottom: 5px; color: #000;">RECHNUNG</h2>
+      <h2 style="margin-bottom: 5px; color: #000;">${window.t('PDF_INVOICE_TITLE').toUpperCase()}</h2>
       <table class="inv-meta-table">
-        <tr><td>Nummer:</td><td><strong>${num.toString().padStart(4,'0')}</strong></td></tr>
-        <tr><td>Datum:</td><td>${dateStr}</td></tr>
-        <tr><td>Leistungszeitraum:</td><td>${month} ${year}</td></tr>
+        <tr><td>${window.t('PDF_NUM')}:</td><td><strong>${num.toString().padStart(4,'0')}</strong></td></tr>
+        <tr><td>${window.t('PDF_DATE')}:</td><td>${dateStr}</td></tr>
+        <tr><td>${window.t('PDF_SVY_DESC')}:</td><td>${month} ${year}</td></tr>
       </table>
     </div>
     <div style="text-align: right;">
@@ -784,14 +788,14 @@ function buildInvoiceHTML(row, num, overrideMonth, overrideYear, overrideDate){
     </div>
   </div>
   <div style="margin-bottom: 40px; margin-top:20px;">
-    <strong>EmpfängerIn:</strong><br>
+    <strong>${window.t('TH_RECIPIENT')}:</strong><br>
     <div style="font-size: 15px; margin-top: 5px; color:#000;">
       ${r.name}<br> ${r.street?r.street+'<br>':''} ${r.city?r.city:''}
     </div>
   </div>
   <table class="inv-items-table">
     <thead>
-      <tr><th>Leistung / Beschreibung</th><th style="text-align:right;">Menge</th><th style="text-align:right;">Einzel</th><th style="text-align:right;">Gesamt (Netto)</th></tr>
+      <tr><th>${window.t('PDF_SVY_DESC')}</th><th style="text-align:right;">Menge</th><th style="text-align:right;">${window.t('PDF_SVY_PRICE')}</th><th style="text-align:right;">${window.t('PDF_SVY_TOTAL')}</th></tr>
     </thead>
     <tbody>
       ${calcLines.length ? calcLines.map(l => `
@@ -802,23 +806,23 @@ function buildInvoiceHTML(row, num, overrideMonth, overrideYear, overrideDate){
           <td style="text-align:right;">${(l.qty*(l.rate||0)).toFixed(2)} €</td>
         </tr>
       `).join('') : `
-        <tr><td>Allgemeine Leistungen</td><td style="text-align:right;">1</td><td style="text-align:right;">${netto.toFixed(2)} €</td><td style="text-align:right;">${netto.toFixed(2)} €</td></tr>
+        <tr><td>${window.t('PDF_SVY_DESC')}</td><td style="text-align:right;">1</td><td style="text-align:right;">${netto.toFixed(2)} €</td><td style="text-align:right;">${netto.toFixed(2)} €</td></tr>
       `}
     </tbody>
   </table>
   <div style="display:flex; justify-content:flex-end;">
     <table style="width:300px;">
-      <tr class="inv-total-row"><td>Netto Summe:</td><td>${netto.toFixed(2)} €</td></tr>
-      <tr class="inv-total-row"><td>USt. ${(taxRate*100).toFixed(0)}%:</td><td>${tax.toFixed(2)} €</td></tr>
-      <tr class="inv-total-row inv-grand-total"><td>Gesamtbetrag:</td><td>${total.toFixed(2)} €</td></tr>
+      <tr class="inv-total-row"><td>${window.t('PDF_NET_SUM')}:</td><td>${netto.toFixed(2)} €</td></tr>
+      <tr class="inv-total-row"><td>${window.t('PDF_TAX')} ${(taxRate*100).toFixed(0)}%:</td><td>${tax.toFixed(2)} €</td></tr>
+      <tr class="inv-total-row inv-grand-total"><td>${window.t('PDF_TOTAL_SUM')}:</td><td>${total.toFixed(2)} €</td></tr>
     </table>
   </div>
   <div style="margin-top:40px;font-size:12px;color:#555;">
     <p>Zahlbar innerhalb von 14 Tagen ohne Abzug. Bitte geben Sie bei der Überweisung die Rechnungsnummer <strong>${num.toString().padStart(4,'0')}</strong> an.</p>
   </div>
   <div class="inv-footer">
-    <div><strong>Bankverbindung</strong><br>${S.bank}<br>Konto: ${S.kontoinhaber}<br>IBAN: ${S.iban}<br>BIC: ${S.bic}</div>
-    <div style="text-align:right;"><strong>Unternehmensdaten</strong><br>UID: ${S.uid}<br>Steuer-Nr: ${S.steuer}</div>
+    <div><strong>${window.t('PDF_BANK')}</strong><br>${S.bank}<br>Konto: ${S.kontoinhaber}<br>${window.t('PDF_IBAN')}: ${S.iban}<br>${window.t('PDF_BIC')}: ${S.bic}</div>
+    <div style="text-align:right;"><strong>Unternehmensdaten</strong><br>${window.t('PDF_UID')}: ${S.uid}<br>${window.t('PDF_TAX_NUM')}: ${S.steuer}</div>
   </div>
   ${(S.iban && S.bic && S.kontoinhaber) ? `
   <div class="inv-qr-section" style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;display:flex;align-items:center;gap:24px;">

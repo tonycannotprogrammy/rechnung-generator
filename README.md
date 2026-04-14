@@ -10,7 +10,7 @@ A native desktop application for creating, managing, and archiving professional 
 
 ### macOS (Apple Silicon)
 
-1. Download **[Rechnung Generator_2.1.0_aarch64.dmg](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.1.0_aarch64.dmg)**
+1. Download **[Rechnung Generator_2.2.0_aarch64.dmg](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.2.0_aarch64.dmg)**
 2. Open the `.dmg` file
 3. Drag **Rechnung Generator** into your **Applications** folder
 4. Open **Terminal** and run this command to remove Apple's quarantine lock:
@@ -22,11 +22,11 @@ A native desktop application for creating, managing, and archiving professional 
 ### Windows
 
 **Option A — Installer (recommended):**
-1. Download **[Rechnung Generator_2.1.0_x64-setup.exe](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.1.0_x64-setup.exe)**
+1. Download **[Rechnung Generator_2.2.0_x64-setup.exe](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.2.0_x64-setup.exe)**
 2. Run the installer — it will set up the app and create a Start Menu shortcut
 
 **Option B — MSI package:**
-1. Download **[Rechnung Generator_2.1.0_x64_en-US.msi](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.1.0_x64_en-US.msi)**
+1. Download **[Rechnung Generator_2.2.0_x64_en-US.msi](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.2.0_x64_en-US.msi)**
 2. Double-click to install via Windows Installer
 
 > **Note:** Windows SmartScreen may show a warning for unsigned apps. Click **More info** → **Run anyway**.

@@ -7,38 +7,39 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="stylesheet" href="styles.css">
-<!-- Tauri IPC setup -->
-<script>
-  // Expose invoke broadly if needed, but normally use window.__TAURI__.core.invoke
-</script>
 </head>
 <body>
 <div class="app">
 
   <div class="app-header">
-    <div class="app-title">Rechnung <span>Generator</span></div>
+    <div class="app-title" data-i18n="APP_TITLE" id="app-title-el">Rechnung <span>Generator</span></div>
     <div class="header-actions" style="position:relative;">
       <!-- Profile Selector -->
       <div class="profile-selector">
         <select id="profile-select" onchange="handleProfileSwitch(this.value)"></select>
-        <button class="btn btn-sm" onclick="showProfileManager()" title="Profile verwalten">👥</button>
+        <button class="btn btn-sm" onclick="showProfileManager()" title="Profile verwalten" data-i18n="BTN_PROFILE">👥</button>
       </div>
 
       <!-- Settings Menu -->
-      <button class="btn btn-sm" onclick="toggleSettingsMenu()" title="Einstellungen">⚙️ Einstellungen</button>
+      <button class="btn btn-sm" onclick="toggleSettingsMenu()" title="Einstellungen" data-i18n="BTN_SETTINGS">⚙️ Einstellungen</button>
       <div id="settings-dropdown" class="settings-dropdown" style="display:none;">
-        <button class="btn btn-sm" onclick="toggleTheme(); closeSettingsMenu()" style="width:100%; justify-content:flex-start;" id="theme-btn">🌙 Dark Mode</button>
+        <div style="display:flex; justify-content:space-between; padding:4px;">
+          <button class="btn btn-sm" onclick="sysSettings.language='de';saveSettings();applyLanguageToDOM();closeSettingsMenu()">🇩🇪 DE</button>
+          <button class="btn btn-sm" onclick="sysSettings.language='en';saveSettings();applyLanguageToDOM();closeSettingsMenu()">🇬🇧 EN</button>
+        </div>
+        <div class="divider" style="margin:4px 0"></div>
+        <button class="btn btn-sm" onclick="toggleTheme(); closeSettingsMenu()" style="width:100%; justify-content:flex-start;" id="theme-btn" data-i18n="LBL_DARK_MODE">🌙 Dark Mode</button>
         <label class="btn btn-sm btn-accent" style="cursor:pointer; width:100%; justify-content:flex-start; margin:0;">
-          📂 JSON Import
+          <span data-i18n="LBL_JSON_IMPORT">📂 JSON Import</span>
           <input type="file" accept=".json" style="display:none" onchange="importBackupData(event); closeSettingsMenu()">
         </label>
-        <button class="btn btn-sm btn-blue" onclick="exportBackupData(); closeSettingsMenu()" style="width:100%; justify-content:flex-start;">💾 Backup Export</button>
+        <button class="btn btn-sm btn-blue" onclick="exportBackupData(); closeSettingsMenu()" style="width:100%; justify-content:flex-start;" data-i18n="LBL_BACKUP_EXPORT">💾 Backup Export</button>
         <div class="divider" style="margin:6px 0"></div>
         <div class="field" style="padding:0 4px;">
-          <label style="font-size:11px;">Speicherort</label>
+          <label style="font-size:11px;" data-i18n="LBL_STORAGE_PATH">Speicherort</label>
           <div style="display:flex;gap:4px">
-            <input id="sys-storage-path" disabled value="Laden..." style="flex:1;font-size:11px;padding:5px 7px">
-            <button class="btn btn-sm" onclick="pickStorageFolder(); closeSettingsMenu()" style="padding:4px 8px;font-size:11px">Ändern</button>
+            <input id="sys-storage-path" disabled value="..." style="flex:1;font-size:11px;padding:5px 7px">
+            <button class="btn btn-sm" onclick="pickStorageFolder(); closeSettingsMenu()" style="padding:4px 8px;font-size:11px" data-i18n="BTN_CHANGE">Ändern</button>
           </div>
         </div>
       </div>
@@ -46,96 +47,86 @@
   </div>
 
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('sender')">👤 Einstellungen</button>
-    <button class="tab" onclick="switchTab('recipients')">🏢 Empfänger</button>
-    <button class="tab" onclick="switchTab('services')">🗂 Leistungen</button>
-    <button class="tab" onclick="switchTab('create')">📝 Rechnung</button>
-    <button class="tab" onclick="switchTab('recurring')">🔄 Dauerauftrag</button>
-    <button class="tab" onclick="switchTab('preview')">👁 Vorschau</button>
-    <button class="tab" onclick="switchTab('archive')">📋 Archiv</button>
+    <button class="tab active" onclick="switchTab('sender')" data-i18n="TAB_SENDER">👤 Einstellungen</button>
+    <button class="tab" onclick="switchTab('recipients')" data-i18n="TAB_RECIPIENTS">🏢 Empfänger</button>
+    <button class="tab" onclick="switchTab('services')" data-i18n="TAB_SERVICES">🗂 Leistungen</button>
+    <button class="tab" onclick="switchTab('create')" data-i18n="TAB_CREATE">📝 Rechnung</button>
+    <button class="tab" onclick="switchTab('recurring')" data-i18n="TAB_RECURRING">🔄 Dauerauftrag</button>
+    <button class="tab" onclick="switchTab('preview')" data-i18n="TAB_PREVIEW">👁 Vorschau</button>
+    <button class="tab" onclick="switchTab('archive')" data-i18n="TAB_ARCHIVE">📋 Archiv</button>
   </div>
 
-  <!-- SENDER / SETTINGS TAB -->
   <div id="tab-sender" class="section active">
     <div class="card">
-      <div class="card-title"><span class="icon">👤</span> Absender-Informationen</div>
+      <div class="card-title" data-i18n="CARD_SENDER_INFO"><span class="icon">👤</span> Absender-Informationen</div>
       <div class="grid2" style="gap:14px">
-        <div class="field"><label>Firmenname</label><input id="s-name" oninput="saveSender()"></div>
-        <div class="field"><label>E-Mail</label><input id="s-email" type="email" oninput="saveSender()"></div>
-        <div class="field"><label>Straße</label><input id="s-street" oninput="saveSender()"></div>
-        <div class="field"><label>Ort & PLZ</label><input id="s-city" oninput="saveSender()"></div>
-        <div class="field"><label>Telefon</label><input id="s-tel" oninput="saveSender()"></div>
-        <div class="field"><label>UID-Nummer</label><input id="s-uid" oninput="saveSender()"></div>
-        <div class="field"><label>Steuer-Nummer</label><input id="s-steuer" oninput="saveSender()"></div>
-        <div class="field"><label>Bank</label><input id="s-bank" oninput="saveSender()"></div>
-        <div class="field"><label>Kontoinhaber</label><input id="s-kinhaber" oninput="saveSender()"></div>
-        <div class="field"><label>IBAN</label><input id="s-iban" oninput="saveSender()"></div>
-        <div class="field"><label>BIC</label><input id="s-bic" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_COMPANY">Firmenname</label><input id="s-name" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_EMAIL">E-Mail</label><input id="s-email" type="email" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_STREET">Straße</label><input id="s-street" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_CITY">Ort & PLZ</label><input id="s-city" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_PHONE">Telefon</label><input id="s-tel" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_UID">UID-Nummer</label><input id="s-uid" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_TAX_NUM">Steuer-Nummer</label><input id="s-steuer" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_BANK">Bank</label><input id="s-bank" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_ACCOUNT_HOLDER">Kontoinhaber</label><input id="s-kinhaber" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_IBAN">IBAN</label><input id="s-iban" oninput="saveSender()"></div>
+        <div class="field"><label data-i18n="LBL_BIC">BIC</label><input id="s-bic" oninput="saveSender()"></div>
       </div>
-      <div style="margin-top:14px;"><span style="font-size:12.5px;color:var(--green)">✓ Änderungen werden automatisch gespeichert</span></div>
+      <div style="margin-top:14px;"><span style="font-size:12.5px;color:var(--green)" data-i18n="TXT_AUTO_SAVE">✓ Änderungen werden automatisch gespeichert</span></div>
     </div>
     
     <div class="card">
-      <div class="card-title"><span class="icon">✉️</span> E-Mail Standard-Vorlage</div>
-      <div class="info-box" style="margin-bottom:1rem">
-        Nutze Platzhalter, die automatisch beim Senden ersetzt werden:<br>
-        <code>{Name}</code> = Empfängername | <code>{Nummer}</code> = Rechnungsnummer | <code>{Monat}</code> = Rechnungsmonat
+      <div class="card-title" data-i18n="CARD_EMAIL_TEMPLATE"><span class="icon">✉️</span> E-Mail Standard-Vorlage</div>
+      <div class="info-box" style="margin-bottom:1rem" data-i18n="TXT_PLACEHOLDER_INFO">
+        Nutze Platzhalter...
       </div>
       <div class="field">
-        <label>Betreff</label>
-        <input id="em-subject" value="Rechnung {Nummer} - {Monat}" oninput="saveSender()">
+        <label data-i18n="LBL_SUBJECT">Betreff</label>
+        <input id="em-subject" value="Rechnung" oninput="saveSender()">
       </div>
       <div class="field" style="margin-top:10px;">
-        <label>Nachricht (Body)</label>
-        <textarea id="em-body" rows="5" oninput="saveSender()">Hallo {Name},
-
-anbei erhältst du die Rechnung Nr. {Nummer} für den Monat {Monat}.
-
-Viele Grüße,
-Dein Team</textarea>
+        <label data-i18n="LBL_BODY">Nachricht (Body)</label>
+        <textarea id="em-body" rows="5" oninput="saveSender()">Hallo...</textarea>
       </div>
     </div>
   </div>
 
-  <!-- RECIPIENTS TAB -->
   <div id="tab-recipients" class="section">
     <div class="card">
-      <div class="card-title"><span class="icon">🏢</span> Empfänger verwalten</div>
+      <div class="card-title" data-i18n="CARD_RECIPIENTS"><span class="icon">🏢</span> Empfänger verwalten</div>
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>#</th><th>Name</th><th>Straße</th><th>Ort</th><th>Telefon</th><th>E-Mail</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th data-i18n="TH_NAME">Name</th><th data-i18n="TH_STREET">Straße</th><th data-i18n="TH_CITY">Ort</th><th data-i18n="TH_PHONE">Telefon</th><th data-i18n="TH_EMAIL">E-Mail</th><th></th></tr></thead>
           <tbody id="rec-body"></tbody>
         </table>
       </div>
       <div style="margin-top:1rem">
-        <button class="btn btn-accent" onclick="addRecipient()">+ Empfänger hinzufügen</button>
+        <button class="btn btn-accent" onclick="addRecipient()" data-i18n="BTN_ADD_RECIPIENT">+ Empfänger hinzufügen</button>
       </div>
     </div>
   </div>
 
-  <!-- SERVICES TAB -->
   <div id="tab-services" class="section">
     <div class="card">
-      <div class="card-title"><span class="icon">🗂</span> Leistungsvorlagen verwalten</div>
+      <div class="card-title" data-i18n="CARD_SERVICES"><span class="icon">🗂</span> Leistungsvorlagen verwalten</div>
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Bezeichnung</th><th>Art der Verrechnung</th><th>Preis (€)</th><th>Beschreibung (Optional)</th><th></th></tr></thead>
+          <thead><tr><th data-i18n="TH_DESC">Bezeichnung</th><th data-i18n="TH_RATE">Art der Verrechnung</th><th data-i18n="TH_PRICE">Preis (€)</th><th data-i18n="TH_DETAILS">Beschreibung (Optional)</th><th></th></tr></thead>
           <tbody id="templates-container"></tbody>
         </table>
       </div>
       <div style="margin-top:1rem">
-        <button class="btn btn-accent" onclick="addServiceTemplate()">+ Vorlage hinzufügen</button>
+        <button class="btn btn-accent" onclick="addServiceTemplate()" data-i18n="BTN_ADD_TEMPLATE">+ Vorlage hinzufügen</button>
       </div>
     </div>
   </div>
 
-  <!-- INVOICE CREATION TAB -->
   <div id="tab-create" class="section">
     <div class="card">
-      <div class="card-title"><span class="icon">⚙️</span> Rechnungseinstellungen</div>
+      <div class="card-title" data-i18n="CARD_INVOICE_SETTINGS"><span class="icon">⚙️</span> Rechnungseinstellungen</div>
       <div class="grid4">
-        <div class="field"><label>Start-Rechnungsnummer</label><input type="number" id="inp-start-num" value="1" min="1" oninput="saveSettings();renderReceiptRows()"></div>
-        <div class="field"><label>Monat</label>
+        <div class="field"><label data-i18n="LBL_START_NUM">Start-Rechnungsnummer</label><input type="number" id="inp-start-num" value="1" min="1" oninput="saveSettings();renderReceiptRows()"></div>
+        <div class="field"><label data-i18n="LBL_MONTH">Monat</label>
           <select id="sel-month" onchange="saveSettings()">
             <option value="Jänner">Jänner</option><option value="Februar">Februar</option><option value="März">März</option>
             <option value="April">April</option><option value="Mai">Mai</option><option value="Juni">Juni</option>
@@ -143,78 +134,74 @@ Dein Team</textarea>
             <option value="Oktober">Oktober</option><option value="November">November</option><option value="Dezember">Dezember</option>
           </select>
         </div>
-        <div class="field"><label>Jahr</label><input type="number" id="inp-year" onchange="saveSettings()"></div>
-        <div class="field"><label>Rechnungsdatum (Automatisch)</label><input type="date" id="inp-date" onchange="saveSettings()"></div>
+        <div class="field"><label data-i18n="LBL_YEAR">Jahr</label><input type="number" id="inp-year" onchange="saveSettings()"></div>
+        <div class="field"><label data-i18n="LBL_DATE">Rechnungsdatum (Automatisch)</label><input type="date" id="inp-date" onchange="saveSettings()"></div>
       </div>
       <div class="divider"></div>
-      <p style="font-size:12px;color:var(--ink3)">Die Monatstrennung und Nummernfortführung erfolgt automatisch durch den Master-Registry-Zähler.</p>
+      <p style="font-size:12px;color:var(--ink3)" data-i18n="TXT_INVOICE_INFO">Die Monatstrennung und Nummernfortführung erfolgt automatisch durch den Master-Registry-Zähler.</p>
     </div>
 
     <div id="receipt-rows"></div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:.5rem">
-      <button class="btn btn-accent" onclick="addReceiptRow()">+ Rechnung hinzufügen</button>
-      <button class="btn btn-primary" onclick="switchTab('preview')">👁 Vorschau anzeigen</button>
+      <button class="btn btn-accent" onclick="addReceiptRow()" data-i18n="BTN_ADD_INVOICE">+ Rechnung hinzufügen</button>
+      <button class="btn btn-primary" onclick="switchTab('preview')" data-i18n="BTN_PREVIEW">👁 Vorschau anzeigen</button>
     </div>
   </div>
 
-  <!-- DAUERAUFTRAG (RECURRING INVOICES) TAB -->
   <div id="tab-recurring" class="section">
     <div class="card">
-      <div class="card-title"><span class="icon">🔄</span> Daueraufträge verwalten</div>
-      <div class="info-box" style="margin-bottom:1rem">
+      <div class="card-title" data-i18n="CARD_RECURRING"><span class="icon">🔄</span> Daueraufträge verwalten</div>
+      <div class="info-box" style="margin-bottom:1rem" data-i18n="TXT_RECURRING_INFO">
         Erstelle wiederkehrende Rechnungsvorlagen. Du kannst jederzeit daraus eine Rechnung generieren lassen.
       </div>
       <div id="recurring-list"></div>
       <div style="margin-top:1rem;display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-accent" onclick="addRecurring()">+ Dauerauftrag hinzufügen</button>
-        <button class="btn btn-green" onclick="generateAllDue()">⚡ Alle fälligen generieren</button>
+        <button class="btn btn-accent" onclick="addRecurring()" data-i18n="BTN_ADD_RECURRING">+ Dauerauftrag hinzufügen</button>
+        <button class="btn btn-green" onclick="generateAllDue()" data-i18n="BTN_GENERATE_ALL">⚡ Alle fälligen generieren</button>
       </div>
     </div>
   </div>
 
-  <!-- PREVIEW TAB -->
   <div id="tab-preview" class="section">
     <div class="card" style="margin-bottom:1rem">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <select id="preview-select" onchange="showPreview(this.value)" style="flex:1;min-width:220px"></select>
-        <button class="btn btn-primary" onclick="printCurrent()">🖨️ PDF Herunterladen</button>
-        <button class="btn btn-blue" onclick="emailCurrent()" id="btn-email-current" style="display:none;">📧 Als E-Mail senden</button>
-        <button class="btn btn-accent" onclick="printAll()">📑 Alle speichern & als "Finalized" markieren</button>
+        <button class="btn btn-primary" onclick="printCurrent()" data-i18n="BTN_DOWNLOAD_PDF">🖨️ PDF Herunterladen</button>
+        <button class="btn btn-blue" onclick="emailCurrent()" id="btn-email-current" style="display:none;" data-i18n="BTN_SEND_EMAIL">📧 Als E-Mail senden</button>
+        <button class="btn btn-accent" onclick="printAll()" data-i18n="BTN_SAVE_ALL">📑 Alle speichern & als "Finalized" markieren</button>
       </div>
     </div>
     <div class="preview-wrap" id="preview-area"></div>
   </div>
 
-  <!-- ARCHIVE TAB -->
   <div id="tab-archive" class="section">
     <div class="card">
-      <div class="card-title"><span class="icon">📋</span> Rechnungsarchiv</div>
+      <div class="card-title" data-i18n="CARD_ARCHIVE"><span class="icon">📋</span> Rechnungsarchiv</div>
       <div style="display:flex;gap:10px;margin-bottom:1rem">
-        <input type="text" id="archive-search" placeholder="Suche nach Name, Kategorie, Datum..." style="flex:1" onkeyup="filterArchive()">
+        <input type="text" id="archive-search" data-i18n="TXT_SEARCH_ARCHIVE" placeholder="Suche nach Name, Kategorie, Datum..." style="flex:1" onkeyup="filterArchive()">
       </div>
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Datum</th><th>Empfänger</th><th>Nummer / Datei</th><th>Betrag</th><th>Status</th><th>Aktionen</th></tr></thead>
+          <thead><tr><th data-i18n="TH_DATE">Datum</th><th data-i18n="TH_RECIPIENT">Empfänger</th><th data-i18n="TH_NUM_FILE">Nummer / Datei</th><th data-i18n="TH_AMOUNT">Betrag</th><th data-i18n="TH_STATUS">Status</th><th data-i18n="TH_ACTIONS">Aktionen</th></tr></thead>
           <tbody id="archive-body"></tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- PROFILE MANAGER MODAL -->
   <div id="profile-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeProfileManager()">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>👥 Profile verwalten</h3>
+        <h3 data-i18n="MODAL_PROFILES">👥 Profile verwalten</h3>
         <button class="btn btn-sm btn-icon" onclick="closeProfileManager()">×</button>
       </div>
       <div class="modal-body">
         <div id="profile-list"></div>
         <div class="divider" style="margin:12px 0"></div>
         <div style="display:flex;gap:8px">
-          <input id="new-profile-name" placeholder="Neues Profil..." style="flex:1">
-          <button class="btn btn-accent btn-sm" onclick="createNewProfile()">+ Erstellen</button>
+          <input id="new-profile-name" data-i18n="PLH_NEW_PROFILE" placeholder="Neues Profil..." style="flex:1">
+          <button class="btn btn-accent btn-sm" onclick="createNewProfile()" data-i18n="BTN_CREATE">+ Erstellen</button>
         </div>
       </div>
     </div>
@@ -222,6 +209,11 @@ Dein Team</textarea>
 
 </div>
 
+<script src="i18n.js"></script>
 <script src="app.js"></script>
+<script>
+  // Setup translation on DOM loaded if backend hasn't triggered it
+  window.addEventListener('DOMContentLoaded', () => { setTimeout(window.applyLanguageToDOM, 500); });
+</script>
 </body>
 </html>
