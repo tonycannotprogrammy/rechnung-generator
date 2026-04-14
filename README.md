@@ -13,7 +13,11 @@ A native desktop application for creating, managing, and archiving professional 
 1. Download **[Rechnung Generator_2.1.0_aarch64.dmg](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.1.0_aarch64.dmg)**
 2. Open the `.dmg` file
 3. Drag **Rechnung Generator** into your **Applications** folder
-4. On first launch: Right-click the app → **Open** → **Open** (macOS Gatekeeper prompt for unsigned apps)
+4. Open **Terminal** and run this command to remove Apple's quarantine lock:
+   ```bash
+   xattr -cr "/Applications/Rechnung Generator.app"
+   ```
+5. You can now open the app normally!
 
 ### Windows
 
