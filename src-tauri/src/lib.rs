@@ -16,6 +16,7 @@ pub fn run() {
             commands::update_receipt_status,
             commands::delete_receipt,
             // Email & Print
+            commands::open_pdf,
             commands::open_email,
             commands::print_file,
             // Settings

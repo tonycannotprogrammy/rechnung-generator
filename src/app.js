@@ -982,7 +982,11 @@ async function downloadArchivePdf(fileName) {
     await html2pdf().set(opt).from(tempWrapper).save();
     document.body.removeChild(tempWrapper);
   } else {
-    alert("Das ist ein altes Dokument. Bitte benutze den Vorschau/Email-Teilen Button.");
+    if(r.path) {
+      await invoke('open_pdf', { path: r.path });
+    } else {
+      alert("Fehler: Dateipfad für altes Dokument nicht gefunden.");
+    }
   }
 }
 
@@ -998,7 +1002,12 @@ async function previewArchiveReceipt(fileName) {
     area.innerHTML = buildInvoiceHTML(r.row_data, r.invoice_num, month, year, r.date);
     setTimeout(renderEPCQRCodes, 50);
   } else {
-    alert("Das ist ein altes Dokument. Keine Vorschau vorhanden.");
+    if(r.path) {
+      // Altes Dokument -> öffne die ursprünglich generierte PDF-Datei
+      await invoke('open_pdf', { path: r.path });
+    } else {
+      alert("Fehler: Dateipfad für altes Dokument nicht gefunden.");
+    }
   }
 }
 

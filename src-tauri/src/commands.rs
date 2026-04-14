@@ -88,6 +88,11 @@ pub fn open_email(app: tauri::AppHandle, to: String, subject: String, body: Stri
 }
 
 #[command]
+pub fn open_pdf(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    app.shell().open(&path, None).map_err(|e| e.to_string())
+}
+
+#[command]
 pub async fn print_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let res = app.shell().command("lp").args(&[&path]).output().await;
