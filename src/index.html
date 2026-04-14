@@ -18,14 +18,29 @@
   <div class="app-header">
     <div class="app-title">Rechnung <span>Generator</span></div>
     <div class="header-actions" style="position:relative;">
-      <button class="btn btn-sm" onclick="document.getElementById('settings-dropdown').style.display = document.getElementById('settings-dropdown').style.display === 'none' ? 'flex' : 'none'" title="Einstellungen">⚙️ Einstellungen</button>
-      <div id="settings-dropdown" style="display:none; position:absolute; right:0; top:110%; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-md); border-radius:var(--radius-sm); padding:10px; z-index:100; min-width:180px; flex-direction:column; gap:8px;">
-        <button class="btn btn-sm" onclick="toggleTheme(); this.parentNode.style.display='none'" style="width:100%; justify-content:flex-start;" id="theme-btn">🌙 Dark Mode</button>
+      <!-- Profile Selector -->
+      <div class="profile-selector">
+        <select id="profile-select" onchange="handleProfileSwitch(this.value)"></select>
+        <button class="btn btn-sm" onclick="showProfileManager()" title="Profile verwalten">👥</button>
+      </div>
+
+      <!-- Settings Menu -->
+      <button class="btn btn-sm" onclick="toggleSettingsMenu()" title="Einstellungen">⚙️ Einstellungen</button>
+      <div id="settings-dropdown" class="settings-dropdown" style="display:none;">
+        <button class="btn btn-sm" onclick="toggleTheme(); closeSettingsMenu()" style="width:100%; justify-content:flex-start;" id="theme-btn">🌙 Dark Mode</button>
         <label class="btn btn-sm btn-accent" style="cursor:pointer; width:100%; justify-content:flex-start; margin:0;">
           📂 JSON Import
-          <input type="file" accept=".json" style="display:none" onchange="importBackupData(event); this.parentNode.parentNode.style.display='none'">
+          <input type="file" accept=".json" style="display:none" onchange="importBackupData(event); closeSettingsMenu()">
         </label>
-        <button class="btn btn-sm btn-blue" onclick="exportBackupData(); this.parentNode.style.display='none'" style="width:100%; justify-content:flex-start;">💾 Backup Export</button>
+        <button class="btn btn-sm btn-blue" onclick="exportBackupData(); closeSettingsMenu()" style="width:100%; justify-content:flex-start;">💾 Backup Export</button>
+        <div class="divider" style="margin:6px 0"></div>
+        <div class="field" style="padding:0 4px;">
+          <label style="font-size:11px;">Speicherort</label>
+          <div style="display:flex;gap:4px">
+            <input id="sys-storage-path" disabled value="Laden..." style="flex:1;font-size:11px;padding:5px 7px">
+            <button class="btn btn-sm" onclick="pickStorageFolder(); closeSettingsMenu()" style="padding:4px 8px;font-size:11px">Ändern</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -35,10 +50,12 @@
     <button class="tab" onclick="switchTab('recipients')">🏢 Empfänger</button>
     <button class="tab" onclick="switchTab('services')">🗂 Leistungen</button>
     <button class="tab" onclick="switchTab('create')">📝 Rechnung</button>
+    <button class="tab" onclick="switchTab('recurring')">🔄 Dauerauftrag</button>
     <button class="tab" onclick="switchTab('preview')">👁 Vorschau</button>
     <button class="tab" onclick="switchTab('archive')">📋 Archiv</button>
   </div>
 
+  <!-- SENDER / SETTINGS TAB -->
   <div id="tab-sender" class="section active">
     <div class="card">
       <div class="card-title"><span class="icon">👤</span> Absender-Informationen</div>
@@ -78,20 +95,9 @@ Viele Grüße,
 Dein Team</textarea>
       </div>
     </div>
-
-    <!-- NEW DESKTOP SETTINGS -->
-    <div class="card">
-      <div class="card-title"><span class="icon">💻</span> App-Einstellungen</div>
-      <div class="field">
-        <label>Lokaler Speicherort (PDFs & Backup)</label>
-        <div style="display:flex;gap:8px">
-          <input id="sys-storage-path" disabled value="Laden..." style="flex:1">
-          <button class="btn btn-sm" onclick="pickStorageFolder()">Ändern</button>
-        </div>
-      </div>
-    </div>
   </div>
 
+  <!-- RECIPIENTS TAB -->
   <div id="tab-recipients" class="section">
     <div class="card">
       <div class="card-title"><span class="icon">🏢</span> Empfänger verwalten</div>
@@ -107,6 +113,7 @@ Dein Team</textarea>
     </div>
   </div>
 
+  <!-- SERVICES TAB -->
   <div id="tab-services" class="section">
     <div class="card">
       <div class="card-title"><span class="icon">🗂</span> Leistungsvorlagen verwalten</div>
@@ -122,6 +129,7 @@ Dein Team</textarea>
     </div>
   </div>
 
+  <!-- INVOICE CREATION TAB -->
   <div id="tab-create" class="section">
     <div class="card">
       <div class="card-title"><span class="icon">⚙️</span> Rechnungseinstellungen</div>
@@ -139,7 +147,6 @@ Dein Team</textarea>
         <div class="field"><label>Rechnungsdatum (Automatisch)</label><input type="date" id="inp-date" onchange="saveSettings()"></div>
       </div>
       <div class="divider"></div>
-      <!-- Removed closeMonth() button. Will be automated via date generation -->
       <p style="font-size:12px;color:var(--ink3)">Die Monatstrennung und Nummernfortführung erfolgt automatisch durch den Master-Registry-Zähler.</p>
     </div>
 
@@ -151,6 +158,22 @@ Dein Team</textarea>
     </div>
   </div>
 
+  <!-- DAUERAUFTRAG (RECURRING INVOICES) TAB -->
+  <div id="tab-recurring" class="section">
+    <div class="card">
+      <div class="card-title"><span class="icon">🔄</span> Daueraufträge verwalten</div>
+      <div class="info-box" style="margin-bottom:1rem">
+        Erstelle wiederkehrende Rechnungsvorlagen. Du kannst jederzeit daraus eine Rechnung generieren lassen.
+      </div>
+      <div id="recurring-list"></div>
+      <div style="margin-top:1rem;display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-accent" onclick="addRecurring()">+ Dauerauftrag hinzufügen</button>
+        <button class="btn btn-green" onclick="generateAllDue()">⚡ Alle fälligen generieren</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PREVIEW TAB -->
   <div id="tab-preview" class="section">
     <div class="card" style="margin-bottom:1rem">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -163,7 +186,7 @@ Dein Team</textarea>
     <div class="preview-wrap" id="preview-area"></div>
   </div>
 
-  <!-- NEW ARCHIVE TAB -->
+  <!-- ARCHIVE TAB -->
   <div id="tab-archive" class="section">
     <div class="card">
       <div class="card-title"><span class="icon">📋</span> Rechnungsarchiv</div>
@@ -179,7 +202,23 @@ Dein Team</textarea>
     </div>
   </div>
 
-
+  <!-- PROFILE MANAGER MODAL -->
+  <div id="profile-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeProfileManager()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>👥 Profile verwalten</h3>
+        <button class="btn btn-sm btn-icon" onclick="closeProfileManager()">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="profile-list"></div>
+        <div class="divider" style="margin:12px 0"></div>
+        <div style="display:flex;gap:8px">
+          <input id="new-profile-name" placeholder="Neues Profil..." style="flex:1">
+          <button class="btn btn-accent btn-sm" onclick="createNewProfile()">+ Erstellen</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 </div>
 

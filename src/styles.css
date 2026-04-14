@@ -31,7 +31,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--ink);line-height:1
 .app-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;padding-bottom:1.25rem;border-bottom:1.5px solid var(--border)}
 .app-title{font-size:1.35rem;font-weight:600;letter-spacing:-.02em}
 .app-title span{color:var(--accent)}
-.header-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;position:relative;}
+
+/* Profile Selector */
+.profile-selector{display:flex;gap:4px;align-items:center;margin-right:8px;padding-right:8px;border-right:1px solid var(--border);}
+.profile-selector select{padding:6px 10px;font-size:12.5px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink);font-family:var(--font);cursor:pointer;min-width:100px;}
+
+/* Settings Dropdown */
+.settings-dropdown{position:absolute;right:0;top:110%;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-md);border-radius:var(--radius-sm);padding:10px;z-index:100;min-width:220px;flex-direction:column;gap:8px;}
 
 .tabs{display:flex;gap:4px;margin-bottom:1.75rem;background:var(--surface2);padding:4px;border-radius:var(--radius);border:1px solid var(--border)}
 .tab{flex:1;text-align:center;padding:9px 14px;font-size:13.5px;font-weight:500;cursor:pointer;border-radius:var(--radius-sm);color:var(--ink2);transition:all .18s;border:none;background:none;font-family:var(--font)}
@@ -127,3 +134,173 @@ input[type=number]{font-family:var(--mono);font-size:13px}
 
 /* Utility for archive / dashboard */
 .empty-state { text-align: center; padding: 3rem; color: var(--ink3); font-size: 14px; }
+
+/* ═══════════════════════════════════════════════════════
+   UNDO BAR (soft delete countdown)  
+   ═══════════════════════════════════════════════════════ */
+.undo-row {
+  padding: 0 !important;
+}
+.undo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--red-light);
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 4px;
+  animation: undoSlideIn 0.2s ease;
+}
+.undo-bar strong {
+  font-family: var(--mono);
+  font-size: 14px;
+  min-width: 20px;
+  text-align: center;
+}
+@keyframes undoSlideIn {
+  from { opacity: 0; transform: scaleY(0.8); }
+  to { opacity: 1; transform: scaleY(1); }
+}
+
+/* ═══════════════════════════════════════════════════════
+   ARCHIVE — Clickable vendor/file names  
+   ═══════════════════════════════════════════════════════ */
+.archive-link {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.archive-link:hover {
+  color: var(--accent) !important;
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ARCHIVE — Actions with overflow menu  
+   ═══════════════════════════════════════════════════════ */
+.archive-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.overflow-menu-wrap {
+  position: relative;
+}
+.overflow-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: 50;
+  min-width: 140px;
+  flex-direction: column;
+  gap: 2px;
+}
+.overflow-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-family: var(--font);
+  background: none;
+  border: none;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.12s;
+  text-align: left;
+}
+.overflow-menu button:hover {
+  background: var(--surface2);
+}
+.overflow-danger {
+  color: var(--red) !important;
+}
+.overflow-danger:hover {
+  background: var(--red-light) !important;
+}
+.overflow-divider {
+  height: 1px;
+  background: var(--border2);
+  margin: 2px 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PROFILE MANAGER MODAL  
+   ═══════════════════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn 0.15s ease;
+}
+.modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border2);
+}
+.modal-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.modal-body {
+  padding: 1.25rem;
+}
+.profile-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  transition: all 0.15s;
+}
+.profile-item.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.profile-name {
+  flex: 1;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RECURRING INVOICE (Dauerauftrag)  
+   ═══════════════════════════════════════════════════════ */
+.recurring-inactive {
+  opacity: 0.55;
+}
+.recurring-inactive .receipt-card-head {
+  background: var(--surface2);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}

@@ -1,6 +1,11 @@
 const { invoke } = window.__TAURI__.core;
 
 // ═══════════════════════════════════════════════════════
+//  GERMAN MONTH NAMES (for email template resolution)
+// ═══════════════════════════════════════════════════════
+const GERMAN_MONTHS = ['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+// ═══════════════════════════════════════════════════════
 //  STATE & INITIALIZATION
 // ═══════════════════════════════════════════════════════
 let sender = {};
@@ -8,11 +13,16 @@ let recipients = [];
 let serviceTemplates = [];
 let receiptRows = [];
 let recipientHistory = {}; 
+let recurringInvoices = [];
 let emailTemplate = { subject: "Rechnung {Nummer} - {Monat}", body: "Hallo {Name},\n\nanbei erhältst du die Rechnung Nr. {Nummer} für den Monat {Monat}.\n\nViele Grüße,\nDein Team" };
 let sysSettings = {};
 let appRegistry = [];
+let activeProfile = 'Standard';
 
 async function loadFromBackend() {
+  // Run migration on first launch
+  try { await invoke('run_migration'); } catch(e) {}
+
   try {
     sysSettings = await invoke('get_settings');
   } catch(e) {
@@ -25,6 +35,7 @@ async function loadFromBackend() {
   serviceTemplates = sysSettings.templates || [];
   receiptRows = sysSettings.drafts || [];
   recipientHistory = sysSettings.history || {};
+  recurringInvoices = sysSettings.recurring || [];
   if(sysSettings.emailTemplate) emailTemplate = sysSettings.emailTemplate;
 
   if(sysSettings.theme === 'dark') toggleTheme(true);
@@ -41,6 +52,11 @@ async function loadFromBackend() {
     const storagePath = await invoke('get_storage_path');
     document.getElementById('sys-storage-path').value = storagePath;
   } catch(e) {}
+
+  // Load profile info
+  try {
+    activeProfile = await invoke('get_active_profile');
+  } catch(e) {}
 }
 
 async function fullSave() {
@@ -48,6 +64,8 @@ async function fullSave() {
     const obj = {...item};
     delete obj._deleting;
     delete obj._deleteTimer;
+    delete obj._countdown;
+    delete obj._countdownInterval;
     return obj;
   });
   sysSettings.sender = sender;
@@ -56,12 +74,14 @@ async function fullSave() {
   sysSettings.drafts = receiptRows;
   sysSettings.history = recipientHistory;
   sysSettings.emailTemplate = emailTemplate;
+  sysSettings.recurring = strip(recurringInvoices);
   try {
     await invoke('save_settings', { settings: sysSettings });
   } catch(e) {
     console.error('Save failed:', e);
   }
 }
+
 window.addEventListener("DOMContentLoaded", async () => {
   await loadFromBackend();
 
@@ -80,15 +100,25 @@ window.addEventListener("DOMContentLoaded", async () => {
   renderRecipients();
   renderTemplates();
   renderReceiptRows();
+  renderRecurring();
   renderArchive();
+  loadProfiles();
 });
 
 async function pickStorageFolder() {
   const f = await invoke('pick_folder');
   if(f) {
+    await invoke('set_storage_path', { path: f });
     document.getElementById('sys-storage-path').value = f;
-    // We would need to tell backend to move storage or just update path.
-    alert("Speicherort aktualisiert (Funktionalität im Backend wird benötigt, um Dateien zu migrieren).");
+    // Reload everything from new location
+    await loadFromBackend();
+    loadSenderFields();
+    renderRecipients();
+    renderTemplates();
+    renderReceiptRows();
+    renderRecurring();
+    renderArchive();
+    loadProfiles();
   }
 }
 
@@ -100,8 +130,6 @@ function saveSettings() {
   fullSave();
 }
 
-
-
 function getSmartDate() {
   const now = new Date();
   let target = now.getDate() <= 15 ? new Date(now.getFullYear(), now.getMonth(), 0) : new Date(now.getFullYear(), now.getMonth() + 1, 0); 
@@ -110,20 +138,123 @@ function getSmartDate() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  SETTINGS MENU
+// ═══════════════════════════════════════════════════════
+function toggleSettingsMenu() {
+  const dd = document.getElementById('settings-dropdown');
+  dd.style.display = dd.style.display === 'none' ? 'flex' : 'none';
+}
+function closeSettingsMenu() {
+  document.getElementById('settings-dropdown').style.display = 'none';
+}
+// Close settings menu when clicking outside
+document.addEventListener('click', (e) => {
+  const dd = document.getElementById('settings-dropdown');
+  if(dd && dd.style.display !== 'none') {
+    const headerActions = e.target.closest('.header-actions');
+    if(!headerActions) dd.style.display = 'none';
+  }
+});
+
+// ═══════════════════════════════════════════════════════
 //  THEME / DARK MODE
 // ═══════════════════════════════════════════════════════
 function toggleTheme(forceDark = false) {
   const isDark = forceDark || document.body.getAttribute('data-theme') !== 'dark';
   if(isDark) {
     document.body.setAttribute('data-theme', 'dark');
-    document.getElementById('theme-btn').innerText = '☀️';
+    document.getElementById('theme-btn').innerText = '☀️ Light Mode';
     sysSettings.theme = 'dark';
   } else {
     document.body.removeAttribute('data-theme');
-    document.getElementById('theme-btn').innerText = '🌙';
+    document.getElementById('theme-btn').innerText = '🌙 Dark Mode';
     sysSettings.theme = 'light';
   }
   fullSave();
+}
+
+// ═══════════════════════════════════════════════════════
+//  PROFILES
+// ═══════════════════════════════════════════════════════
+async function loadProfiles() {
+  try {
+    const profiles = await invoke('get_profiles');
+    const sel = document.getElementById('profile-select');
+    sel.innerHTML = profiles.map(p => `<option value="${esc(p)}" ${p===activeProfile?'selected':''}>${esc(p)}</option>`).join('');
+  } catch(e) {
+    console.warn('Could not load profiles:', e);
+  }
+}
+
+async function handleProfileSwitch(name) {
+  try {
+    await invoke('switch_profile', { profileName: name });
+    activeProfile = name;
+    // Reload all data from new profile
+    await loadFromBackend();
+    loadSenderFields();
+    renderRecipients();
+    renderTemplates();
+    renderReceiptRows();
+    renderRecurring();
+    renderArchive();
+
+    // Re-apply settings fields
+    if(sysSettings.startNum) document.getElementById('inp-start-num').value = sysSettings.startNum;
+    if(sysSettings.month) document.getElementById('sel-month').value = sysSettings.month;
+    if(sysSettings.year) document.getElementById('inp-year').value = sysSettings.year;
+    else document.getElementById('inp-year').value = new Date().getFullYear();
+    if(sysSettings.date) document.getElementById('inp-date').value = sysSettings.date;
+    else document.getElementById('inp-date').value = getSmartDate();
+  } catch(e) {
+    alert('Fehler beim Profilwechsel: ' + e);
+  }
+}
+
+function showProfileManager() {
+  document.getElementById('profile-modal').style.display = 'flex';
+  renderProfileList();
+}
+function closeProfileManager() {
+  document.getElementById('profile-modal').style.display = 'none';
+}
+
+async function renderProfileList() {
+  try {
+    const profiles = await invoke('get_profiles');
+    const list = document.getElementById('profile-list');
+    list.innerHTML = profiles.map(p => `
+      <div class="profile-item ${p===activeProfile?'active':''}">
+        <span class="profile-name">${esc(p)}</span>
+        ${p===activeProfile ? '<span class="badge badge-accent">Aktiv</span>' : `<button class="btn btn-sm" onclick="handleProfileSwitch('${esc(p)}');renderProfileList()">Wechseln</button>`}
+        ${p!==activeProfile ? `<button class="btn btn-sm btn-danger" onclick="deleteExistingProfile('${esc(p)}')">×</button>` : ''}
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+async function createNewProfile() {
+  const name = document.getElementById('new-profile-name').value.trim();
+  if(!name) return;
+  try {
+    await invoke('create_profile', { profileName: name });
+    document.getElementById('new-profile-name').value = '';
+    await loadProfiles();
+    renderProfileList();
+  } catch(e) {
+    alert('Fehler: ' + e);
+  }
+}
+
+async function deleteExistingProfile(name) {
+  if(!confirm(`Profil "${name}" wirklich löschen? Alle Daten gehen verloren!`)) return;
+  try {
+    await invoke('delete_profile', { profileName: name });
+    await loadProfiles();
+    renderProfileList();
+  } catch(e) {
+    alert('Fehler: ' + e);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -146,13 +277,45 @@ function saveSender(){
 function getSender(){ return {...sender}; }
 
 // ═══════════════════════════════════════════════════════
+//  SOFT DELETE WITH COUNTDOWN (shared helper)
+// ═══════════════════════════════════════════════════════
+function startSoftDeleteCountdown(item, seconds, onDelete, onRender) {
+  item._deleting = true;
+  item._countdown = seconds;
+  onRender();
+  
+  item._countdownInterval = setInterval(() => {
+    item._countdown--;
+    onRender();
+  }, 1000);
+
+  item._deleteTimer = setTimeout(() => {
+    clearInterval(item._countdownInterval);
+    onDelete();
+  }, seconds * 1000);
+}
+
+function undoSoftDelete(item, onRender) {
+  clearTimeout(item._deleteTimer);
+  clearInterval(item._countdownInterval);
+  item._deleting = false;
+  item._countdown = 0;
+  onRender();
+}
+
+// ═══════════════════════════════════════════════════════
 //  RECIPIENTS
 // ═══════════════════════════════════════════════════════
 function renderRecipients(){
   const tbody = document.getElementById('rec-body');
   tbody.innerHTML = recipients.map((r,i)=>{
     if(r._deleting) {
-      return `<tr><td colspan="7" style="background:var(--red-light); color:var(--red); text-align:center;">Wird in Kürze gelöscht... <button class="btn btn-sm btn-accent" style="margin-left:10px" onclick="undoRemoveRecipient(${i})">Rückgängig</button></td></tr>`;
+      return `<tr><td colspan="7" class="undo-row">
+        <div class="undo-bar">
+          <span>Empfänger wird in <strong>${r._countdown || 0}s</strong> gelöscht...</span>
+          <button class="btn btn-sm btn-accent" onclick="undoRemoveRecipient(${i})">↩ Rückgängig</button>
+        </div>
+      </td></tr>`;
     }
     return `
     <tr>
@@ -169,22 +332,17 @@ function renderRecipients(){
 function addRecipient(){ recipients.push({name:'',street:'',city:'',phone:'',email:''}); renderRecipients(); fullSave(); refreshDropdowns(); }
 function removeRecipient(i){
   const r = recipients[i];
-  r._deleting = true;
-  renderRecipients();
-  r._deleteTimer = setTimeout(() => {
+  startSoftDeleteCountdown(r, 5, () => {
     recipients = recipients.filter(x => x !== r);
     renderRecipients();
     fullSave();
     refreshDropdowns();
-  }, 5000);
+  }, () => renderRecipients());
 }
 function undoRemoveRecipient(i){
-  const r = recipients[i];
-  clearTimeout(r._deleteTimer);
-  r._deleting = false;
-  renderRecipients();
+  undoSoftDelete(recipients[i], () => renderRecipients());
 }
-function recipientOptions(selected=''){ return `<option value="">— Benutzerdefiniert —</option>`+ recipients.map(r=>`<option value="${esc(r.name)}" ${r.name===selected?'selected':''}>${esc(r.name)}</option>`).join(''); }
+function recipientOptions(selected=''){ return `<option value="">— Benutzerdefiniert —</option>`+ recipients.filter(r=>!r._deleting).map(r=>`<option value="${esc(r.name)}" ${r.name===selected?'selected':''}>${esc(r.name)}</option>`).join(''); }
 function refreshDropdowns(){ document.querySelectorAll('.rec-select').forEach(sel=>{ const cur=sel.value; sel.innerHTML=recipientOptions(cur); }); }
 
 // ═══════════════════════════════════════════════════════
@@ -195,7 +353,12 @@ function renderTemplates(){
   if(!serviceTemplates.length){ c.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--ink3);padding:1rem;">Noch keine Vorlagen vorhanden.</td></tr>'; return; }
   c.innerHTML = serviceTemplates.map((t,i)=>{
     if(t._deleting) {
-      return `<tr><td colspan="5" style="background:var(--red-light); color:var(--red); text-align:center;">Wird in Kürze gelöscht... <button class="btn btn-sm btn-accent" style="margin-left:10px" onclick="undoRemoveTemplate(${t.id})">Rückgängig</button></td></tr>`;
+      return `<tr><td colspan="5" class="undo-row">
+        <div class="undo-bar">
+          <span>Vorlage wird in <strong>${t._countdown || 0}s</strong> gelöscht...</span>
+          <button class="btn btn-sm btn-accent" onclick="undoRemoveTemplate(${t.id})">↩ Rückgängig</button>
+        </div>
+      </td></tr>`;
     }
     return `
     <tr>
@@ -217,21 +380,17 @@ function addServiceTemplate(){ serviceTemplates.push({ id: Date.now(), name: '',
 function removeTemplate(id){
   const t = serviceTemplates.find(x => x.id === id);
   if (!t) return;
-  t._deleting = true;
-  renderTemplates();
-  t._deleteTimer = setTimeout(() => {
+  startSoftDeleteCountdown(t, 5, () => {
     serviceTemplates = serviceTemplates.filter(x => x.id !== id);
     fullSave();
     renderTemplates();
     renderReceiptRows();
-  }, 5000);
+  }, () => renderTemplates());
 }
 function undoRemoveTemplate(id){
   const t = serviceTemplates.find(x => x.id === id);
   if (!t) return;
-  clearTimeout(t._deleteTimer);
-  t._deleting = false;
-  renderTemplates();
+  undoSoftDelete(t, () => renderTemplates());
 }
 
 // ═══════════════════════════════════════════════════════
@@ -266,7 +425,7 @@ function renderReceiptRows(){
         ${serviceTemplates.length?`<div style="margin-bottom:12px">
           <label style="margin-bottom:4px">Schnell-Vorlage:</label>
           <div class="templates-list">
-            ${serviceTemplates.map(t=>`<span class="template-chip" onclick="insertTemplate(${i},${t.id})">+ ${esc(t.name)}</span>`).join('')}
+            ${serviceTemplates.filter(t=>!t._deleting).map(t=>`<span class="template-chip" onclick="insertTemplate(${i},${t.id})">+ ${esc(t.name)}</span>`).join('')}
           </div>
         </div>`:''}
 
@@ -342,6 +501,215 @@ function insertTemplate(rowIdx, tplId, skipRender=false){
 }
 
 // ═══════════════════════════════════════════════════════
+//  DAUERAUFTRAG (RECURRING INVOICES)
+// ═══════════════════════════════════════════════════════
+function renderRecurring() {
+  const container = document.getElementById('recurring-list');
+  if(!container) return;
+  if(!recurringInvoices.length) {
+    container.innerHTML = '<div class="empty-state">Noch keine Daueraufträge vorhanden.</div>';
+    return;
+  }
+  container.innerHTML = recurringInvoices.map((item, i) => {
+    if(item._deleting) {
+      return `<div class="receipt-card"><div class="receipt-card-body undo-row">
+        <div class="undo-bar">
+          <span>Dauerauftrag wird in <strong>${item._countdown || 0}s</strong> gelöscht...</span>
+          <button class="btn btn-sm btn-accent" onclick="undoRemoveRecurring(${item.id})">↩ Rückgängig</button>
+        </div>
+      </div></div>`;
+    }
+    const calcLines = item.calcLines || [];
+    const calcTotal = calcLines.reduce((s,l) => s + (l.qty*(l.rate||0)), 0);
+    const taxRate = item.taxRate != null ? item.taxRate : 0.20;
+    const total = calcTotal + calcTotal * taxRate;
+    const freqLabel = {monthly:'Monatlich',quarterly:'Vierteljährlich',yearly:'Jährlich'}[item.frequency] || item.frequency;
+    const nextDue = getNextDueDate(item);
+    const isDue = nextDue && new Date(nextDue) <= new Date();
+
+    return `
+    <div class="receipt-card ${item.active ? '' : 'recurring-inactive'}">
+      <div class="receipt-card-head">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge ${item.active ? 'badge-accent' : 'badge-gray'}">🔄 ${freqLabel}</span>
+          <strong>${esc(item.recipientName || 'Kein Empfänger')}</strong>
+          ${isDue && item.active ? '<span class="badge badge-blue" style="animation:pulse 2s infinite">⚡ Fällig</span>' : ''}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm ${item.active ? 'btn-green' : ''}" onclick="toggleRecurringActive(${item.id})">${item.active ? '✓ Aktiv' : '✗ Inaktiv'}</button>
+          <button class="btn btn-sm btn-danger" onclick="removeRecurring(${item.id})">Entfernen</button>
+        </div>
+      </div>
+      <div class="receipt-card-body">
+        <div class="grid2" style="margin-bottom:12px">
+          <div class="field">
+            <label>Empfänger</label>
+            <select class="rec-select" onchange="recurringInvoices[${i}].recipientName=this.value;fullSave();renderRecurring()">${recipientOptions(item.recipientName)}</select>
+          </div>
+          <div class="field">
+            <label>Frequenz</label>
+            <select onchange="recurringInvoices[${i}].frequency=this.value;fullSave();renderRecurring()">
+              <option value="monthly" ${item.frequency==='monthly'?'selected':''}>Monatlich</option>
+              <option value="quarterly" ${item.frequency==='quarterly'?'selected':''}>Vierteljährlich</option>
+              <option value="yearly" ${item.frequency==='yearly'?'selected':''}>Jährlich</option>
+            </select>
+          </div>
+        </div>
+
+        ${serviceTemplates.length?`<div style="margin-bottom:12px">
+          <label style="margin-bottom:4px">Schnell-Vorlage:</label>
+          <div class="templates-list">
+            ${serviceTemplates.filter(t=>!t._deleting).map(t=>`<span class="template-chip" onclick="insertRecurringTemplate(${i},${t.id})">+ ${esc(t.name)}</span>`).join('')}
+          </div>
+        </div>`:''}
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px">
+          <div>${calcLines.map((l,li)=>recurringCalcLineHTML(i,li,l)).join('')}</div>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+            <button class="btn btn-sm" onclick="addRecurringCalcLine(${i})">+ Zeile</button>
+            ${calcLines.length?`<span style="font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--accent);margin-left:auto">Netto: ${calcTotal.toFixed(2)} € · Brutto: ${total.toFixed(2)} €</span>`:''}
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label>Steuersatz</label>
+            <select onchange="recurringInvoices[${i}].taxRate=parseFloat(this.value);fullSave();renderRecurring()">
+              <option value="0.20" ${(taxRate===0.20)?'selected':''}>20%</option>
+              <option value="0.10" ${taxRate===0.10?'selected':''}>10%</option>
+              <option value="0" ${taxRate===0?'selected':''}>0% (Steuerbefreit)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Zuletzt generiert</label>
+            <input type="date" value="${item.lastGenerated||''}" onchange="recurringInvoices[${i}].lastGenerated=this.value;fullSave();renderRecurring()">
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <button class="btn btn-accent" onclick="generateFromRecurring(${item.id})">📝 Rechnung generieren</button>
+          ${nextDue ? `<span style="font-size:12px;color:var(--ink3);margin-left:12px">Nächste Fälligkeit: ${nextDue}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function recurringCalcLineHTML(i, li, l) {
+  return `<div class="calc-row" style="margin-bottom:4px">
+    <input value="${esc(l.desc||'')}" placeholder="Beschreibung" oninput="recurringInvoices[${i}].calcLines[${li}].desc=this.value;fullSave()">
+    <select onchange="recurringInvoices[${i}].calcLines[${li}].type=this.value;fullSave()">
+      <option value="fixed" ${l.type==='fixed'?'selected':''}>Pauschal</option>
+      <option value="hourly" ${l.type==='hourly'?'selected':''}>Stunden</option>
+      <option value="per-unit" ${l.type==='per-unit'?'selected':''}>Stück</option>
+    </select>
+    <input type="number" min="0" step="1" value="${l.qty||1}" placeholder="Menge" oninput="recurringInvoices[${i}].calcLines[${li}].qty=parseFloat(this.value)||0;fullSave();renderRecurring()">
+    <input type="number" min="0" step="0.01" value="${l.rate||0}" placeholder="€" oninput="recurringInvoices[${i}].calcLines[${li}].rate=parseFloat(this.value)||0;fullSave();renderRecurring()">
+    <button class="btn btn-danger btn-icon" onclick="removeRecurringCalcLine(${i},${li})">×</button>
+  </div>`;
+}
+
+function addRecurringCalcLine(i) { recurringInvoices[i].calcLines.push({desc:'',type:'fixed',qty:1,rate:0}); fullSave(); renderRecurring(); }
+function removeRecurringCalcLine(i,li) { recurringInvoices[i].calcLines.splice(li,1); fullSave(); renderRecurring(); }
+function insertRecurringTemplate(rowIdx, tplId) {
+  const tpl = serviceTemplates.find(t=>t.id===tplId);
+  if(!tpl) return;
+  recurringInvoices[rowIdx].calcLines.push({desc:tpl.name+(tpl.desc?' – '+tpl.desc:''), type:tpl.type, qty:1, rate:tpl.rate});
+  fullSave(); renderRecurring();
+}
+
+function addRecurring() {
+  recurringInvoices.push({
+    id: Date.now(),
+    recipientName: '',
+    calcLines: [],
+    taxRate: 0.20,
+    frequency: 'monthly',
+    active: true,
+    lastGenerated: ''
+  });
+  fullSave(); renderRecurring();
+}
+
+function removeRecurring(id) {
+  const item = recurringInvoices.find(x => x.id === id);
+  if(!item) return;
+  startSoftDeleteCountdown(item, 5, () => {
+    recurringInvoices = recurringInvoices.filter(x => x.id !== id);
+    fullSave(); renderRecurring();
+  }, () => renderRecurring());
+}
+
+function undoRemoveRecurring(id) {
+  const item = recurringInvoices.find(x => x.id === id);
+  if(!item) return;
+  undoSoftDelete(item, () => renderRecurring());
+}
+
+function toggleRecurringActive(id) {
+  const item = recurringInvoices.find(x => x.id === id);
+  if(!item) return;
+  item.active = !item.active;
+  fullSave(); renderRecurring();
+}
+
+function getNextDueDate(item) {
+  if(!item.lastGenerated) return null;
+  const last = new Date(item.lastGenerated);
+  let next;
+  if(item.frequency === 'monthly') {
+    next = new Date(last.getFullYear(), last.getMonth() + 1, last.getDate());
+  } else if(item.frequency === 'quarterly') {
+    next = new Date(last.getFullYear(), last.getMonth() + 3, last.getDate());
+  } else {
+    next = new Date(last.getFullYear() + 1, last.getMonth(), last.getDate());
+  }
+  return `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`;
+}
+
+function generateFromRecurring(id) {
+  const item = recurringInvoices.find(x => x.id === id);
+  if(!item || !item.active) return;
+
+  const calcTotal = (item.calcLines||[]).reduce((s,l) => s + (l.qty*(l.rate||0)), 0);
+
+  // Create a receipt row from the recurring template
+  receiptRows.push({
+    recipient: item.recipientName,
+    customName: '',
+    betrag: Math.round(calcTotal * 100) / 100,
+    taxRate: item.taxRate != null ? item.taxRate : 0.20,
+    calcLines: JSON.parse(JSON.stringify(item.calcLines || []))
+  });
+
+  // Update last generated date
+  const today = new Date();
+  item.lastGenerated = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  fullSave();
+  renderReceiptRows();
+  renderRecurring();
+  switchTab('create');
+}
+
+function generateAllDue() {
+  let count = 0;
+  recurringInvoices.forEach(item => {
+    if(!item.active) return;
+    const nextDue = getNextDueDate(item);
+    if(!nextDue || new Date(nextDue) <= new Date()) {
+      generateFromRecurring(item.id);
+      count++;
+    }
+  });
+  if(count === 0) {
+    alert('Keine fälligen Daueraufträge gefunden.');
+  } else {
+    switchTab('create');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 //  INVOICE BUILDER & PDF EXPORT
 // ═══════════════════════════════════════════════════════
 function getRecipientInfo(row){
@@ -351,16 +719,17 @@ function getRecipientInfo(row){
 
 const epcDataStore = {};
 
-function buildInvoiceHTML(row, num){
+function buildInvoiceHTML(row, num, overrideMonth, overrideYear, overrideDate){
   const S = getSender();
   const r = getRecipientInfo(row);
   const taxRate = row.taxRate!=null?row.taxRate:0.20;
   const netto = row.betrag||0;
   const tax = netto*taxRate;
   const total = netto+tax;
-  const month = document.getElementById('sel-month').value;
-  const year = document.getElementById('inp-year').value;
-  const dateStr = document.getElementById('inp-date').value.split('-').reverse().join('.');
+  const month = overrideMonth || document.getElementById('sel-month').value;
+  const year = overrideYear || document.getElementById('inp-year').value;
+  const dateInput = overrideDate || document.getElementById('inp-date').value;
+  const dateStr = dateInput.split('-').reverse().join('.');
   const calcLines = (row.calcLines||[]).filter(l=>l.desc||l.rate);
 
   if(S.iban && S.bic && S.kontoinhaber) {
@@ -489,9 +858,9 @@ function showPreview(val){
 }
 
 // TAURI PDF SAVE FLOW
-async function generatePDFBytes(row, num, filename) {
-  const month = document.getElementById('sel-month').value;
-  const year = document.getElementById('inp-year').value;
+async function generatePDFBytes(row, num, filename, overrideMonth, overrideYear, overrideDate) {
+  const month = overrideMonth || document.getElementById('sel-month').value;
+  const year = overrideYear || document.getElementById('inp-year').value;
   const taxRate = row.taxRate != null ? row.taxRate : 0.20;
   const netto = row.betrag || 0;
   const total = netto + netto * taxRate;
@@ -500,7 +869,7 @@ async function generatePDFBytes(row, num, filename) {
 
   const wrapper = document.createElement('div');
   wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;background:#fff;';
-  wrapper.innerHTML = buildInvoiceHTML(row, num);
+  wrapper.innerHTML = buildInvoiceHTML(row, num, overrideMonth, overrideYear, overrideDate);
   document.body.appendChild(wrapper);
 
   wrapper.querySelectorAll('[data-epc-id]').forEach(el => {
@@ -564,18 +933,39 @@ async function finalizeReceipt(row, num, status="Finalized") {
   return savedReceipt;
 }
 
+// ═══════════════════════════════════════════════════════
+//  ARCHIVE — Helper to resolve month from date string
+// ═══════════════════════════════════════════════════════
+function getMonthFromDate(dateStr) {
+  if(!dateStr) return document.getElementById('sel-month').value;
+  const parts = dateStr.split('-');
+  if(parts.length < 2) return document.getElementById('sel-month').value;
+  const monthIdx = parseInt(parts[1]) - 1;
+  return GERMAN_MONTHS[monthIdx] || document.getElementById('sel-month').value;
+}
+
+function getYearFromDate(dateStr) {
+  if(!dateStr) return document.getElementById('inp-year').value;
+  return dateStr.split('-')[0] || document.getElementById('inp-year').value;
+}
+
+// ═══════════════════════════════════════════════════════
+//  ARCHIVE — Download, Preview, Email
+// ═══════════════════════════════════════════════════════
 async function downloadArchivePdf(fileName) {
   const r = appRegistry.find(x => x.file_name === fileName);
   if(!r) return;
   if(r.row_data && r.invoice_num) {
+    const month = getMonthFromDate(r.date);
+    const year = getYearFromDate(r.date);
+    
     const tempWrapper = document.createElement('div');
-    tempWrapper.innerHTML = buildInvoiceHTML(r.row_data, r.invoice_num);
+    tempWrapper.innerHTML = buildInvoiceHTML(r.row_data, r.invoice_num, month, year, r.date);
     const S = getSender();
     if(S.iban && S.bic && S.kontoinhaber) {
         const tr = r.row_data.taxRate != null ? r.row_data.taxRate : 0.20;
         const total = (r.row_data.betrag||0) * (1 + tr);
-        const parts = r.date.split('-');
-        epcDataStore[r.invoice_num] = buildEPCString(S, total, r.invoice_num, document.getElementById('sel-month').value, parts[0]||'2024');
+        epcDataStore[r.invoice_num] = buildEPCString(S, total, r.invoice_num, month, year);
     }
     
     document.body.appendChild(tempWrapper);
@@ -602,8 +992,10 @@ async function previewArchiveReceipt(fileName) {
   if(r.row_data && r.invoice_num) {
     switchTab('preview');
     const area = document.getElementById('preview-area');
+    const month = getMonthFromDate(r.date);
+    const year = getYearFromDate(r.date);
     document.getElementById('btn-email-current').style.display = 'none';
-    area.innerHTML = buildInvoiceHTML(r.row_data, r.invoice_num);
+    area.innerHTML = buildInvoiceHTML(r.row_data, r.invoice_num, month, year, r.date);
     setTimeout(renderEPCQRCodes, 50);
   } else {
     alert("Das ist ein altes Dokument. Keine Vorschau vorhanden.");
@@ -621,19 +1013,21 @@ async function emailArchiveReceipt(fileName) {
   }
 
   const recInfo = getRecipientInfo(r.row_data);
-  const parts = r.date.split('-');
-  const month = document.getElementById('sel-month').value; 
-  
+  // FIX: Derive month from the receipt's stored date, not the current selector
+  const month = getMonthFromDate(r.date);
+
   let subj = emailTemplate.subject.replace(/{Name}/g, recInfo.name).replace(/{Nummer}/g, r.invoice_num).replace(/{Monat}/g, month);
   let body = emailTemplate.body.replace(/{Name}/g, recInfo.name).replace(/{Nummer}/g, r.invoice_num).replace(/{Monat}/g, month);
 
-  const bytesArray = await generatePDFBytes(r.row_data, r.invoice_num, fileName);
+  const bytesArray = await generatePDFBytes(r.row_data, r.invoice_num, fileName, month, getYearFromDate(r.date), r.date);
   const tempPath = await invoke('save_temp_pdf', { fileName: fileName, pdfBytes: bytesArray });
 
   await invoke('open_email', { to: recInfo.email||'', subject: subj, body: body, attachmentPath: tempPath });
 }
 
-
+// ═══════════════════════════════════════════════════════
+//  PRINT / EMAIL (current invoices)
+// ═══════════════════════════════════════════════════════
 async function printCurrent(){
   const val = document.getElementById('preview-select').value;
   if(val === 'all') return printAll();
@@ -700,7 +1094,7 @@ async function emailCurrent() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  ARCHIVE & DASHBOARD
+//  ARCHIVE TABLE (with overflow menu & clickable rows)
 // ═══════════════════════════════════════════════════════
 function renderArchive() {
   const term = (document.getElementById('archive-search')?.value || '').toLowerCase();
@@ -716,13 +1110,18 @@ function renderArchive() {
 
   tbody.innerHTML = filtered.map(r => {
     if(r._deleting) {
-      return `<tr><td colspan="6" style="background:var(--red-light); color:var(--red); text-align:center;">Wird in Kürze gelöscht... <button class="btn btn-sm btn-accent" style="margin-left:10px" onclick="undoDeleteReceipt('${esc(r.file_name)}')">Rückgängig</button></td></tr>`;
+      return `<tr><td colspan="6" class="undo-row">
+        <div class="undo-bar">
+          <span>Rechnung wird in <strong>${r._countdown || 0}s</strong> gelöscht...</span>
+          <button class="btn btn-sm btn-accent" onclick="undoDeleteReceipt('${esc(r.file_name)}')">↩ Rückgängig</button>
+        </div>
+      </td></tr>`;
     }
     return `
     <tr>
       <td>${r.date}</td>
-      <td><strong>${esc(r.vendor)}</strong></td>
-      <td><span style="font-family:var(--mono);font-size:12px;color:var(--ink2)">${esc(r.file_name)}</span></td>
+      <td><strong class="archive-link" onclick="previewArchiveReceipt('${esc(r.file_name)}')">${esc(r.vendor)}</strong></td>
+      <td><span class="archive-link" onclick="previewArchiveReceipt('${esc(r.file_name)}')" style="font-family:var(--mono);font-size:12px;color:var(--ink2)">${esc(r.file_name)}</span></td>
       <td>${r.amount.toFixed(2)} €</td>
       <td>
         <select onchange="updateStatus('${esc(r.file_name)}', this.value)" style="border:none;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;">
@@ -733,15 +1132,34 @@ function renderArchive() {
         </select>
       </td>
       <td>
-        <button class="btn btn-sm btn-icon" onclick="previewArchiveReceipt('${esc(r.file_name)}')" title="Vorschau ansehen">👁</button>
-        <button class="btn btn-sm btn-icon" onclick="downloadArchivePdf('${esc(r.file_name)}')" title="PDF Herunterladen">💾</button>
-        <button class="btn btn-sm btn-icon" onclick="emailArchiveReceipt('${esc(r.file_name)}')" title="Teilen/Email">📧</button>
-        <button class="btn btn-sm btn-icon btn-danger" onclick="deleteReceipt('${esc(r.file_name)}')">×</button>
+        <div class="archive-actions">
+          <button class="btn btn-sm btn-icon" onclick="downloadArchivePdf('${esc(r.file_name)}')" title="PDF Herunterladen">💾</button>
+          <button class="btn btn-sm btn-icon" onclick="emailArchiveReceipt('${esc(r.file_name)}')" title="Teilen/Email">📧</button>
+          <div class="overflow-menu-wrap">
+            <button class="btn btn-sm btn-icon" onclick="toggleOverflowMenu(event, '${esc(r.file_name)}')" title="Mehr">⋯</button>
+            <div class="overflow-menu" id="overflow-${esc(r.file_name)}" style="display:none">
+              <button onclick="previewArchiveReceipt('${esc(r.file_name)}');closeAllOverflows()">👁 Vorschau</button>
+              <div class="overflow-divider"></div>
+              <button class="overflow-danger" onclick="deleteReceipt('${esc(r.file_name)}');closeAllOverflows()">🗑 Löschen</button>
+            </div>
+          </div>
+        </div>
       </td>
     </tr>
   `
   }).join('');
 }
+
+function toggleOverflowMenu(event, fileName) {
+  event.stopPropagation();
+  closeAllOverflows();
+  const menu = document.getElementById('overflow-' + fileName);
+  if(menu) menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+}
+function closeAllOverflows() {
+  document.querySelectorAll('.overflow-menu').forEach(m => m.style.display = 'none');
+}
+document.addEventListener('click', () => closeAllOverflows());
 
 function filterArchive() { renderArchive(); }
 
@@ -754,31 +1172,33 @@ async function updateStatus(fileName, newStatus) {
 async function deleteReceipt(fileName) {
   const r = appRegistry.find(x => x.file_name === fileName);
   if(!r) return;
-  r._deleting = true;
-  renderArchive();
-  r._deleteTimer = setTimeout(async () => {
+  startSoftDeleteCountdown(r, 5, async () => {
     await invoke('delete_receipt', { fileName });
     await loadFromBackend();
     renderArchive();
-  }, 5000);
+  }, () => renderArchive());
 }
 
 function undoDeleteReceipt(fileName) {
   const r = appRegistry.find(x => x.file_name === fileName);
   if(!r) return;
-  clearTimeout(r._deleteTimer);
-  r._deleting = false;
-  renderArchive();
+  undoSoftDelete(r, () => renderArchive());
 }
 
+// ═══════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════════════════════
 function switchTab(name){
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', ['sender','recipients','services','create','preview','archive'][i]===name));
+  const tabNames = ['sender','recipients','services','create','recurring','preview','archive'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', tabNames[i]===name));
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if(name==='preview') populatePreviewSelect();
 }
 
-// Backup Export/Import wrapper for new registry formats
+// ═══════════════════════════════════════════════════════
+//  BACKUP EXPORT / IMPORT
+// ═══════════════════════════════════════════════════════
 function exportBackupData() {
   const data = sysSettings;
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
@@ -817,6 +1237,7 @@ function importBackupData(e) {
         serviceTemplates = data.templates || serviceTemplates;
         receiptRows = data.drafts || receiptRows;
         recipientHistory = data.history || recipientHistory;
+        recurringInvoices = data.recurring || recurringInvoices;
         if(data.emailTemplate) emailTemplate = data.emailTemplate;
         
         // Preserve settings fields from new format
@@ -842,6 +1263,7 @@ function importBackupData(e) {
       renderRecipients();
       renderTemplates();
       renderReceiptRows();
+      renderRecurring();
       renderArchive();
       
       alert("✓ Backup wurde erfolgreich geladen (" + (isOldFormat ? "altes Format erkannt" : "neues Format") + ").");

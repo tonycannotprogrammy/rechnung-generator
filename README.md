@@ -10,7 +10,7 @@ A native desktop application for creating, managing, and archiving professional 
 
 ### macOS (Apple Silicon)
 
-1. Download **[Rechnung Generator_0.1.0_aarch64.dmg](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_0.1.0_aarch64.dmg)**
+1. Download **[Rechnung Generator_2.1.0_aarch64.dmg](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.1.0_aarch64.dmg)**
 2. Open the `.dmg` file
 3. Drag **Rechnung Generator** into your **Applications** folder
 4. On first launch: Right-click the app → **Open** → **Open** (macOS Gatekeeper prompt for unsigned apps)
@@ -18,11 +18,11 @@ A native desktop application for creating, managing, and archiving professional 
 ### Windows
 
 **Option A — Installer (recommended):**
-1. Download **[Rechnung Generator_0.1.0_x64-setup.exe](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_0.1.0_x64-setup.exe)**
+1. Download **[Rechnung Generator_2.1.0_x64-setup.exe](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.1.0_x64-setup.exe)**
 2. Run the installer — it will set up the app and create a Start Menu shortcut
 
 **Option B — MSI package:**
-1. Download **[Rechnung Generator_0.1.0_x64_en-US.msi](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_0.1.0_x64_en-US.msi)**
+1. Download **[Rechnung Generator_2.1.0_x64_en-US.msi](https://github.com/tonycannotprogrammy/rechnung-generator/releases/latest/download/Rechnung.Generator_2.1.0_x64_en-US.msi)**
 2. Double-click to install via Windows Installer
 
 > **Note:** Windows SmartScreen may show a warning for unsigned apps. Click **More info** → **Run anyway**.
@@ -36,15 +36,17 @@ Browse all versions: **[github.com/tonycannotprogrammy/rechnung-generator/releas
 ## ✨ Features
 
 - **Invoice Creation** — Professional German invoices with line items, tax rates, and totals
+- **Daueraufträge** — Recurring invoice templates (monthly, quarterly, yearly) with one-click generation
 - **SEPA QR Codes** — Banking-compliant EPC QR codes for instant mobile payments
 - **PDF Export** — High-quality A4 PDF generation with proper print margins
-- **Automated Filing** — PDFs are auto-sorted into `/Receipts/YYYY/MM/` folders
 - **Receipt Archive** — Searchable registry with status tracking (Draft → Finalized → Sent → Archived)
-- **Analytics Dashboard** — Visual expense breakdown by vendor
+- **Multi-Profile** — Multiple accounts/profiles, each with independent data
+- **Centralized Storage** — Store data on iCloud, NAS, or any shared drive for team access
 - **Recipient & Template Management** — Save frequent clients and service line items
-- **Email Integration** — Open your default mail client with pre-filled subject & body
+- **Email Integration** — Open your default mail client with pre-filled subject, body & template
 - **Dark Mode** — Smooth light/dark theme toggle
 - **JSON Backup** — Full import/export of all data (compatible with the legacy web version)
+- **Safe Deletion** — 5-second undo countdown on all deletes
 
 ---
 
@@ -79,7 +81,8 @@ Output will be in `src-tauri/target/release/bundle/`.
 ├── src-tauri/            # Backend (Rust)
 │   └── src/
 │       ├── lib.rs        # Plugin registration & command handlers
-│       ├── commands.rs   # IPC commands (save, print, email, etc.)
+│       ├── commands.rs   # IPC commands (save, print, email, profiles, etc.)
+│       ├── config.rs     # Machine-local config (storage path, active profile)
 │       └── registry.rs   # Receipt data schema & JSON persistence
 └── .github/workflows/
     └── build.yml         # CI: auto-build macOS + Windows on tag push
